@@ -76,10 +76,10 @@ local_env['LINK'] = local_env['CC']
 
 # GAMERANGER isn't exported in all usage paths
 try:
-	if ( GAMERANGER == '1' ):
-		local_env.Append( CPPDEFINES = [ 'GAMERANGER' ] )
+        if ( GAMERANGER == '1' ):
+                local_env.Append( CPPDEFINES = [ 'GAMERANGER' ] )
 except:
-	pass
+        pass
 
 ret = local_env.SharedLibrary( target = 'cgame', source = source_list )
 Return( 'ret' )

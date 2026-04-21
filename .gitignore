@@ -1,0 +1,27 @@
+# Build artifacts
+src/build/
+src/etded.*
+src/etmain/cgame*.so
+src/etmain/qagame*.so
+src/etmain/ui*.so
+
+# SCons cache
+src/.sconsign.dblite
+src/scons.signatures*
+src/site.conf
+src/.sconf_temp/
+
+# Python bytecode
+*.pyc
+__pycache__/
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

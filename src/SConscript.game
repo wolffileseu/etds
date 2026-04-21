@@ -81,7 +81,7 @@ qagame_list = scons_utils.BuildList( 'game', qagame_string )
 
 #botai_objs = []
 #for i in botai_list:
-#	botlib_ai.append( botai_env.StaticObject( os.path.join( 'botlib', i ) ) )
+#       botlib_ai.append( botai_env.StaticObject( os.path.join( 'botlib', i ) ) )
 
 local_env = g_env.Clone()
 
