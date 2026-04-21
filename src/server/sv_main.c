@@ -4,7 +4,7 @@
 Wolfenstein: Enemy Territory GPL Source Code
 Copyright (C) 1999-2010 id Software LLC, a ZeniMax Media company. 
 
-This file is part of the Wolfenstein: Enemy Territory GPL Source Code (Wolf ET Source Code).  
+This file is part of the Wolfenstein: Enemy Territory GPL Source Code (Wolf ET Source Code).  
 
 Wolf ET Source Code is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -91,6 +91,14 @@ cvar_t  *sv_packetdelay;
 
 // fretn
 cvar_t  *sv_fullmsg;
+
+// [ETDS antiflood] getstatus flood protection CVars.
+// Storage lives here; declared extern in server.h. Registered in sv_init.c
+// (SV_Init). Implementation in sv_antiflood.c.
+// Reimplementation inspired by Pauluzz' ET 3.00 0.7.4 reverse-engineered binary.
+cvar_t  *sv_maxGetstatusCheck;         // 0 = off, 1 = on
+cvar_t  *sv_maxGetstatusPerMinute;     // soft threshold: drop packets above this rate
+cvar_t  *sv_maxGetstatusBeforeBlock;   // hard threshold: block IP for session
 
 void SVC_GameCompleteStatus( netadr_t from );       // NERVE - SMF
 
@@ -441,6 +449,13 @@ void SVC_Status( netadr_t from ) {
 		return;
 	}
 
+	// [ETDS antiflood] Drop this getstatus request if the source IP is
+	// exceeding the configured rate limit. Prevents reflective DDoS
+	// amplification abuse. Has no effect when sv_maxGetstatusCheck is 0.
+	if ( SV_CheckForFlood( &from ) ) {
+		return;
+	}
+
 	strcpy( infostring, Cvar_InfoString( CVAR_SERVERINFO | CVAR_SERVERINFO_NOUPDATE ) );
 
 	// echo back the parameter to status. so master servers can use it as a challenge
@@ -564,6 +579,12 @@ void SVC_Info( netadr_t from ) {
 
 	//bani - bugtraq 12534
 	if ( !SV_VerifyChallenge( Cmd_Argv( 1 ) ) ) {
+		return;
+	}
+
+	// [ETDS antiflood] Drop this getinfo request if the source IP is
+	// exceeding the configured rate limit. Same logic as SVC_Status above.
+	if ( SV_CheckForFlood( &from ) ) {
 		return;
 	}
 

@@ -860,6 +860,14 @@ void SV_Init( void ) {
 	// ET://someserver.com
 	sv_fullmsg = Cvar_Get( "sv_fullmsg", "Server is full.", CVAR_ARCHIVE );
 
+	// [ETDS antiflood] getstatus flood protection.
+	// Defaults preserve id-Software behaviour (feature off). Enable by
+	// setting sv_maxGetstatusCheck to 1. See sv_antiflood.c for details.
+	// Threshold defaults match Pauluzz' ET 3.00 0.7.4 (60/min soft, 1200/min hard).
+	sv_maxGetstatusCheck       = Cvar_Get( "sv_maxGetstatusCheck",       "0",    CVAR_ARCHIVE );
+	sv_maxGetstatusPerMinute   = Cvar_Get( "sv_maxGetstatusPerMinute",   "60",   CVAR_ARCHIVE );
+	sv_maxGetstatusBeforeBlock = Cvar_Get( "sv_maxGetstatusBeforeBlock", "1200", CVAR_ARCHIVE );
+
 	// initialize bot cvars so they are listed and can be set before loading the botlib
 	SV_BotInitCvars();
 
@@ -932,6 +940,9 @@ void SV_Shutdown( char *finalmsg ) {
 
 	// free current level
 	SV_ClearServer();
+
+	// [ETDS antiflood] release the flood-tracking table
+	SV_AntiFlood_Shutdown();
 
 	// free server static data
 	if ( svs.clients ) {

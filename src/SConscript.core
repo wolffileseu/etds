@@ -78,6 +78,7 @@ tr_world.c"""
 renderer_list = scons_utils.BuildList( 'renderer', renderer_string )
 
 server_string = """
+sv_antiflood.c
 sv_bot.c
 sv_ccmds.c
 sv_client.c

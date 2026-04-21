@@ -333,6 +333,12 @@ extern cvar_t* g_gameType;
 
 extern cvar_t  *sv_reloading;
 
+// [ETDS antiflood] getstatus flood protection (see sv_antiflood.c).
+// Storage in sv_main.c, registration in sv_init.c.
+extern cvar_t  *sv_maxGetstatusCheck;
+extern cvar_t  *sv_maxGetstatusPerMinute;
+extern cvar_t  *sv_maxGetstatusBeforeBlock;
+
 // TTimo - autodl
 extern cvar_t *sv_dl_maxRate;
 
@@ -371,6 +377,12 @@ void SV_MasterShutdown( void );
 void SV_MasterGameCompleteStatus();     // NERVE - SMF
 //bani - bugtraq 12534
 qboolean SV_VerifyChallenge( char *challenge );
+
+//
+// sv_antiflood.c
+//
+qboolean SV_CheckForFlood( const netadr_t *from );
+void     SV_AntiFlood_Shutdown( void );
 
 
 //

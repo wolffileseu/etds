@@ -25,3 +25,6 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# Windows NTFS alternate data streams (WSL artifact)
+*:Zone.Identifier
