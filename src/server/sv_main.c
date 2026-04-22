@@ -537,7 +537,7 @@ void SVC_Status( netadr_t from, int fromExtra ) {
 	//   fromExtra == 1 (extra socket): report the OPPOSITE protocol, plus
 	//                                  "sv_isf" set to the main net_port
 	//                                  so browsers can pair the two listings.
-	Info_SetValueForKey( infostring, "version", "ET 3.00 - Wolffiles ETDS 0.0.1" );
+	Info_SetValueForKey( infostring, "version", "ET 3.00 - Wolffiles ETDS 0.0.2" );
 	if ( fromExtra == 0 ) {
 		if ( sv_protocol ) {
 			Info_SetValueForKey( infostring, "protocol", va( "%d", sv_protocol->integer ) );
