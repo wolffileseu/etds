@@ -100,6 +100,16 @@ cvar_t  *sv_maxGetstatusCheck;         // 0 = off, 1 = on
 cvar_t  *sv_maxGetstatusPerMinute;     // soft threshold: drop packets above this rate
 cvar_t  *sv_maxGetstatusBeforeBlock;   // hard threshold: block IP for session
 
+// [ETDS rconfilter] RCON source-IP whitelist CVars.
+// Storage lives here; declared extern in server.h. Registered in sv_init.c.
+// Implementation in sv_rconfilter.c. Enforced in SVC_RemoteCommand below.
+cvar_t  *sv_rconfilter;    // 0 = off, 1 = on
+cvar_t  *sv_rcon1;         // whitelist entry 1 (IPv4 with optional *.* wildcards)
+cvar_t  *sv_rcon2;
+cvar_t  *sv_rcon3;
+cvar_t  *sv_rcon4;
+cvar_t  *sv_rcon5;
+
 void SVC_GameCompleteStatus( netadr_t from );       // NERVE - SMF
 
 #define LL( x ) x = LittleLong( x )
@@ -701,6 +711,15 @@ void SVC_RemoteCommand( netadr_t from, msg_t *msg ) {
 		Com_Printf( "Rcon from %s:\n%s\n", NET_AdrToString( from ), Cmd_Argv( 2 ) );
 	}
 
+	// [ETDS rconfilter] Reject rcon from non-whitelisted IPs even when
+	// the password is correct. Matches Pauluzz' ET 3.00 0.7.4 behaviour
+	// exactly: the filter only activates when sv_rconfilter == 1 and the
+	// check happens AFTER the password has already been validated.
+	if ( valid && !SV_RconFilter_IsAllowed( &from ) ) {
+		Com_Printf( "rcon rejected by sv_rconfilter: %s\n", NET_AdrToString( from ) );
+		valid = qfalse;
+	}
+
 	// start redirecting all print outputs to the packet
 	svs.redirectAddress = from;
 	// FIXME TTimo our rcon redirection could be improved
@@ -714,7 +733,16 @@ void SVC_RemoteCommand( netadr_t from, msg_t *msg ) {
 	if ( !strlen( sv_rconPassword->string ) ) {
 		Com_Printf( "No rconpassword set on the server.\n" );
 	} else if ( !valid ) {
-		Com_Printf( "Bad rconpassword.\n" );
+		// [ETDS rconfilter] Distinguish between bad password and filter
+		// rejection, so the Pauluzz-compatible "You are not able to use rcon"
+		// message is sent to legitimate operators coming from off-whitelist.
+		if ( sv_rconfilter && sv_rconfilter->integer == 1 &&
+		     strlen( sv_rconPassword->string ) > 0 &&
+		     !strcmp( Cmd_Argv( 1 ), sv_rconPassword->string ) ) {
+			Com_Printf( "You are not able to use rcon\n" );
+		} else {
+			Com_Printf( "Bad rconpassword.\n" );
+		}
 	} else {
 		remaining[0] = 0;
 

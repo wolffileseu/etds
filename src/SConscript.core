@@ -86,6 +86,7 @@ sv_game.c
 sv_init.c
 sv_main.c
 sv_net_chan.c
+sv_rconfilter.c
 sv_snapshot.c
 sv_world.c"""
 

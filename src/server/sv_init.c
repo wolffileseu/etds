@@ -868,6 +868,18 @@ void SV_Init( void ) {
 	sv_maxGetstatusPerMinute   = Cvar_Get( "sv_maxGetstatusPerMinute",   "60",   CVAR_ARCHIVE );
 	sv_maxGetstatusBeforeBlock = Cvar_Get( "sv_maxGetstatusBeforeBlock", "1200", CVAR_ARCHIVE );
 
+	// [ETDS rconfilter] RCON source-IP whitelist.
+	// Defaults preserve id-Software behaviour (filter off, empty whitelist).
+	// When sv_rconfilter is set to 1, only source IPs matching one of
+	// sv_rcon1..sv_rcon5 are permitted to execute rcon commands (even if
+	// they supply the correct rcon password). See sv_rconfilter.c.
+	sv_rconfilter = Cvar_Get( "sv_rconfilter", "0", CVAR_ARCHIVE );
+	sv_rcon1      = Cvar_Get( "sv_rcon1",      "", CVAR_ARCHIVE );
+	sv_rcon2      = Cvar_Get( "sv_rcon2",      "", CVAR_ARCHIVE );
+	sv_rcon3      = Cvar_Get( "sv_rcon3",      "", CVAR_ARCHIVE );
+	sv_rcon4      = Cvar_Get( "sv_rcon4",      "", CVAR_ARCHIVE );
+	sv_rcon5      = Cvar_Get( "sv_rcon5",      "", CVAR_ARCHIVE );
+
 	// initialize bot cvars so they are listed and can be set before loading the botlib
 	SV_BotInitCvars();
 

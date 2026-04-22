@@ -339,6 +339,15 @@ extern cvar_t  *sv_maxGetstatusCheck;
 extern cvar_t  *sv_maxGetstatusPerMinute;
 extern cvar_t  *sv_maxGetstatusBeforeBlock;
 
+// [ETDS rconfilter] RCON source-IP whitelist (see sv_rconfilter.c).
+// Storage in sv_main.c, registration in sv_init.c.
+extern cvar_t  *sv_rconfilter;
+extern cvar_t  *sv_rcon1;
+extern cvar_t  *sv_rcon2;
+extern cvar_t  *sv_rcon3;
+extern cvar_t  *sv_rcon4;
+extern cvar_t  *sv_rcon5;
+
 // TTimo - autodl
 extern cvar_t *sv_dl_maxRate;
 
@@ -383,6 +392,11 @@ qboolean SV_VerifyChallenge( char *challenge );
 //
 qboolean SV_CheckForFlood( const netadr_t *from );
 void     SV_AntiFlood_Shutdown( void );
+
+//
+// sv_rconfilter.c
+//
+qboolean SV_RconFilter_IsAllowed( const netadr_t *from );
 
 
 //
