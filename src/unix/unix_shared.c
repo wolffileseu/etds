@@ -417,15 +417,13 @@ char *Sys_DefaultHomePath( void ) {
 //============================================
 
 void GetClockTicks( double *t ) {
-	unsigned long lo, hi;
-
-	__asm__ __volatile__ (
-		"rdtsc ;\
-		movl %%eax, %0 ;\
-		movl %%edx, %1 "
-		: : "m" ( lo ), "m" ( hi ) );
-
-	*t = (double) lo + (double) 0xFFFFFFFF * hi ;
+	// [ETDS fix] Replaced 2010-era inline rdtsc asm. The original
+	// declared rdtsc outputs as inputs in the constraints list,
+	// which worked by accident on gcc 4.x but gcc 12+ correctly
+	// optimizes the whole block away, leaving lo/hi uninitialized
+	// and causing a SEGV at the addition below. The gcc builtin
+	// is semantically identical and compiler-understood.
+	*t = (double) __builtin_ia32_rdtsc();
 }
 
 float Sys_GetCPUSpeed( void ) {
