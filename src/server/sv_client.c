@@ -484,6 +484,10 @@ gotnewcl:
 	newcl->lastPacketTime = svs.time;
 	newcl->lastConnectTime = svs.time;
 
+	// [ETDS trackbase] Announce client connect to tracker. No-op if
+	// sv_tbCommands is disabled.
+	SV_TrackBase_ClientConnect( newcl );
+
 	// when we receive the first packet from the client, we will
 	// notice that it is from a different serverid and that the
 	// gamestate message was not just sent, forcing a retransmit
@@ -514,6 +518,11 @@ or crashing -- SV_FinalCommand() will handle that
 void SV_DropClient( client_t *drop, const char *reason ) {
 	int i;
 	challenge_t *challenge;
+
+	// [ETDS trackbase] Announce disconnect before we start mutating
+	// client state. No-op if sv_tbCommands is disabled.
+	SV_TrackBase_ClientDisconnect( drop );
+
 	qboolean isBot = qfalse;
 
 	if ( drop->state == CS_ZOMBIE ) {
@@ -1429,6 +1438,9 @@ void SV_UserinfoChanged( client_t *cl ) {
 		}
 	}
 
+	// [ETDS trackbase] Announce userinfo (name) change to tracker. No-op
+	// if sv_tbCommands is disabled or the client's name is still empty.
+	SV_TrackBase_ClientName( cl );
 }
 
 
@@ -1476,6 +1488,35 @@ void SV_ExecuteClientCommand( client_t *cl, const char *s, qboolean clientOK, qb
 	qboolean bProcessed = qfalse;
 
 	Cmd_TokenizeString( s );
+
+	// [ETDS trackbase] Intercept tb_* commands and forward to tracker.
+	// Returns qtrue when consumed (sent to tracker or feature-disabled msg
+	// printed to client); qfalse to fall through to normal dispatch.
+	if ( SV_TrackBase_ClientCommand( cl, s ) ) {
+		return;
+	}
+
+	// [ETDS trackbase / chatRelay] Mirror chat to server console and forward
+	// to tracker. We do NOT consume the command - we only observe. qagame
+	// still receives the say/say_team/tell for normal in-game dispatch.
+	if ( clientOK ) {
+		const char *cmd0 = Cmd_Argv( 0 );
+		if ( !Q_stricmp( cmd0, "say" ) ||
+		     !Q_stricmp( cmd0, "say_team" ) ||
+		     !Q_stricmp( cmd0, "tell" ) ) {
+			const char *chat_text = Cmd_ArgsFrom(
+				( !Q_stricmp( cmd0, "tell" ) ? 2 : 1 )
+			);
+			SV_ChatRelay_Mirror( cl, cmd0, chat_text );
+			SV_TrackBase_CatchChat( cl, chat_text );
+		}
+		// [ETDS trackbase] Capture weapon-stats ('ws ...') replies from
+		// the client currently being queried; forwards to tracker and
+		// consumes the command if captured.
+		if ( SV_TrackBase_CatchServerCommand( cl, s ) ) {
+			return;
+		}
+	}
 
 	// see if it is a server level command
 	for ( u = ucmds ; u->name ; u++ ) {

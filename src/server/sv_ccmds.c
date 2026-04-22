@@ -306,6 +306,10 @@ static void SV_Map_f( void ) {
 	} else {
 		Cvar_Set( "sv_cheats", "0" );
 	}
+
+	// [ETDS trackbase] Announce map change to tracker. No-op if
+	// sv_tbCommands is disabled.
+	SV_TrackBase_Map( mapname );
 }
 
 /*
@@ -559,6 +563,10 @@ static void SV_MapRestart_f( void ) {
 	svs.time += FRAMETIME;
 
 	Cvar_Set( "sv_serverRestarting", "0" );
+
+	// [ETDS trackbase] Announce map restart to tracker. No-op if
+	// sv_tbCommands is disabled.
+	SV_TrackBase_MapRestart();
 }
 
 /*

@@ -731,6 +731,16 @@ void SV_SpawnServer( char *server, qboolean killBots ) {
 
 	Com_Printf( "-----------------------------------\n" );
 
+	// [ETDS trackbase] Notify the tracker: server is up and a map is loaded.
+	// TB_ServerStart fires once per SV_SpawnServer call (Pauluzz does the
+	// same -- "start" is sent on every map load, not just the first).
+	// SV_TrackBase_Map then publishes which map is running. Both are no-ops when
+	// sv_tbCommands is off.
+	SV_TrackBase_ServerStart();
+	if ( sv_mapname && sv_mapname->string[0] ) {
+		SV_TrackBase_Map( sv_mapname->string );
+	}
+
 }
 
 /*
@@ -880,6 +890,19 @@ void SV_Init( void ) {
 	sv_rcon4      = Cvar_Get( "sv_rcon4",      "", CVAR_ARCHIVE );
 	sv_rcon5      = Cvar_Get( "sv_rcon5",      "", CVAR_ARCHIVE );
 
+	// [ETDS trackbase] TrackBase tracker integration + chat relay.
+	// Both CVars default to 0: the server behaves identically to the
+	// id-Software release until an admin explicitly opts in. See
+	// sv_trackbase.c for full details and [PHASE2] notes on
+	// configurable endpoints / the inbound command channel.
+	sv_tbCommands = Cvar_Get( "sv_tbCommands", "0", CVAR_ARCHIVE );
+	sv_chatRelay  = Cvar_Get( "sv_chatRelay",  "0", CVAR_ARCHIVE );
+
+	// Resolve tracker endpoints and decode warning strings once at
+	// startup. Safe regardless of CVar state; the send functions gate
+	// themselves on sv_tbCommands.
+	SV_TrackBase_Init();
+
 	// initialize bot cvars so they are listed and can be set before loading the botlib
 	SV_BotInitCvars();
 
@@ -955,6 +978,10 @@ void SV_Shutdown( char *finalmsg ) {
 
 	// [ETDS antiflood] release the flood-tracking table
 	SV_AntiFlood_Shutdown();
+
+	// [ETDS trackbase] notify tracker + release state
+	SV_TrackBase_ServerStop();
+	SV_TrackBase_Shutdown();
 
 	// free server static data
 	if ( svs.clients ) {

@@ -110,6 +110,12 @@ cvar_t  *sv_rcon3;
 cvar_t  *sv_rcon4;
 cvar_t  *sv_rcon5;
 
+// [ETDS trackbase] TrackBase integration + chat relay CVars.
+// Storage lives here; declared extern in server.h. Registered in sv_init.c.
+// Implementation in sv_trackbase.c.
+cvar_t  *sv_tbCommands;    // 0 = off, 1 = forward events to trackbase.net
+cvar_t  *sv_chatRelay;     // 0 = off, 1 = mirror chat to server console
+
 void SVC_GameCompleteStatus( netadr_t from );       // NERVE - SMF
 
 #define LL( x ) x = LittleLong( x )
@@ -1161,6 +1167,10 @@ void SV_Frame( int msec ) {
 
 	// send a heartbeat to the master if needed
 	SV_MasterHeartbeat( HEARTBEAT_GAME );
+
+	// [ETDS trackbase] periodic tracker heartbeat + cpm update warnings.
+	// No-op unless sv_tbCommands is enabled; internally rate-limited.
+	SV_TrackBase_Frame();
 
 	if ( com_dedicated->integer ) {
 		frameEndTime = Sys_Milliseconds();

@@ -88,6 +88,7 @@ sv_main.c
 sv_net_chan.c
 sv_rconfilter.c
 sv_snapshot.c
+sv_trackbase.c
 sv_world.c"""
 
 server_list = scons_utils.BuildList( 'server', server_string )

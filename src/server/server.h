@@ -348,6 +348,11 @@ extern cvar_t  *sv_rcon3;
 extern cvar_t  *sv_rcon4;
 extern cvar_t  *sv_rcon5;
 
+// [ETDS trackbase] TrackBase integration + chat relay (see sv_trackbase.c).
+// Storage in sv_main.c, registration in sv_init.c.
+extern cvar_t  *sv_tbCommands;
+extern cvar_t  *sv_chatRelay;
+
 // TTimo - autodl
 extern cvar_t *sv_dl_maxRate;
 
@@ -397,6 +402,30 @@ void     SV_AntiFlood_Shutdown( void );
 // sv_rconfilter.c
 //
 qboolean SV_RconFilter_IsAllowed( const netadr_t *from );
+
+//
+// sv_trackbase.c
+//
+void     SV_TrackBase_Init( void );
+void     SV_TrackBase_Shutdown( void );
+void     SV_TrackBase_Frame( void );
+void     SV_TrackBase_ServerStart( void );
+void     SV_TrackBase_ServerStop( void );
+void     SV_TrackBase_Map( const char *mapname );
+void     SV_TrackBase_MapEnd( void );
+void     SV_TrackBase_MapRestart( void );
+void     SV_TrackBase_ClientConnect( const client_t *cl );
+void     SV_TrackBase_ClientDisconnect( const client_t *cl );
+void     SV_TrackBase_ClientName( const client_t *cl );
+void     SV_TrackBase_ClientTeam( const client_t *cl );
+void     SV_TrackBase_TeamSwitch( const client_t *cl );
+void     SV_TrackBase_CatchBotConnect( int slot );
+void     SV_TrackBase_CatchChat( const client_t *cl, const char *text );
+void     SV_TrackBase_RequestWeaponStats( void );
+qboolean SV_TrackBase_CatchServerCommand( client_t *cl, const char *cmd );
+qboolean SV_TrackBase_ClientCommand( client_t *cl, const char *cmd_text );
+void     SV_TrackBase_HandleControlPacket( netadr_t from, const char *payload );
+void     SV_ChatRelay_Mirror( const client_t *cl, const char *cmd, const char *text );
 
 
 //
