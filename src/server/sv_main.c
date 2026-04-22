@@ -498,6 +498,9 @@ void SVC_Status( netadr_t from, int fromExtra ) {
 
 	//bani - bugtraq 12534
 	if ( !SV_VerifyChallenge( Cmd_Argv( 1 ) ) ) {
+		// [ETDS q3boom] Log the rejected challenge (see SVC_Info for details).
+		SV_WriteDefenceLog( va( "SVC_Status: invalid challenge from %s (length=%zu), dropping",
+		                        NET_AdrToString( from ), strlen( Cmd_Argv( 1 ) ) ) );
 		return;
 	}
 
@@ -663,12 +666,29 @@ void SVC_Info( netadr_t from, int fromExtra ) {
 
 	//bani - bugtraq 12534
 	if ( !SV_VerifyChallenge( Cmd_Argv( 1 ) ) ) {
+		// [ETDS q3boom] Log the rejected challenge so admins can see
+		// attacks. SV_VerifyChallenge drops on length>64 or non-printable
+		// chars (slash, backslash, semicolon etc.) - both are DoS vectors.
+		SV_WriteDefenceLog( va( "SVC_Info: invalid challenge from %s (length=%zu), dropping",
+		                        NET_AdrToString( from ), strlen( Cmd_Argv( 1 ) ) ) );
 		return;
 	}
 
 	// [ETDS antiflood] Drop this getinfo request if the source IP is
 	// exceeding the configured rate limit. Same logic as SVC_Status above.
 	if ( SV_CheckForFlood( &from ) ) {
+		return;
+	}
+
+	// [ETDS q3boom] Redundant safety net against over-long challenges.
+	// SV_VerifyChallenge above already rejects challenges >64 chars
+	// (id-Software's original defense against the 2006 q3boom exploit),
+	// so in practice this check never triggers. Kept for 1:1 compat with
+	// Pauluzz ET 3.00 0.7.4 which has this check in SVC_Status, and as
+	// a belt-and-braces guard in case SV_VerifyChallenge is ever relaxed.
+	if ( strlen( Cmd_Argv( 1 ) ) > 128 ) {
+		SV_WriteDefenceLog( va( "SVC_Info: challenge length from %s exceeded, dropping request",
+		                        NET_AdrToString( from ) ) );
 		return;
 	}
 
