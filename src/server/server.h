@@ -447,6 +447,15 @@ void     SV_TrackBase_HandleControlPacket( netadr_t from, const char *payload );
 void     SV_ChatRelay_Mirror( const client_t *cl, const char *cmd, const char *text );
 
 //
+// sv_defence.c
+//
+void         SV_WriteDefenceLog( const char *message );
+
+// [ETDS dualport] Server-local copy of net_from_socketOrigin, set by
+// SV_PacketEvent. 0 = packet came from main socket, 1 = extra socket.
+extern int   sv_packetSourceOrigin;
+
+//
 // sv_guidcheck.c
 //
 void         SV_GuidCheck_Init( void );

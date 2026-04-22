@@ -191,6 +191,21 @@ void        NET_SendPacket( netsrc_t sock, int length, const void *data, netadr_
 void QDECL NET_OutOfBandPrint( netsrc_t net_socket, netadr_t adr, const char *format, ... );
 void QDECL NET_OutOfBandData( netsrc_t sock, netadr_t adr, byte *format, int len );
 
+// [ETDS dualport] Cross-layer globals used to route packets between the
+// main UDP socket (net_port) and the optional extra UDP socket
+// (net_port_extra). The server loop is single-threaded so these globals
+// are safe to use without synchronization.
+//
+//   net_from_socketOrigin : set by Sys_GetPacket after recvfrom; 0 = main
+//                           socket, 1 = extra socket. Read by
+//                           SV_PacketEvent to set sv_packetSourceOrigin.
+//   sys_packetSendOrigin  : set by the sender BEFORE calling Sys_SendPacket
+//                           (via NET_OutOfBandPrint, which dispatches
+//                           through NET_SendPacket -> Sys_SendPacket).
+//                           0 = send from main, 1 = send from extra.
+extern int net_from_socketOrigin;
+extern int sys_packetSendOrigin;
+
 qboolean    NET_CompareAdr( netadr_t a, netadr_t b );
 qboolean    NET_CompareBaseAdr( netadr_t a, netadr_t b );
 qboolean    NET_IsLocalAddress( netadr_t adr );

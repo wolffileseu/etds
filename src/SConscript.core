@@ -82,6 +82,7 @@ sv_antiflood.c
 sv_bot.c
 sv_ccmds.c
 sv_client.c
+sv_defence.c
 sv_game.c
 sv_guidcheck.c
 sv_init.c

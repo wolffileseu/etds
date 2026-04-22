@@ -116,6 +116,11 @@ cvar_t  *sv_rcon5;
 cvar_t  *sv_tbCommands;    // 0 = off, 1 = forward events to trackbase.net
 cvar_t  *sv_chatRelay;     // 0 = off, 1 = mirror chat to server console
 
+// [ETDS dualport] Set by SV_PacketEvent from net_from_socketOrigin so that
+// SV_ConnectionlessPacket / SVC_Info / SVC_Status can decide which protocol
+// to advertise (main = sv_protocol, extra = inverse).
+int sv_packetSourceOrigin = 0;
+
 // [ETDS guidcheck] GUID validation, protocol checking, auth-server signaling.
 // Storage lives here; declared extern in server.h. Registered in sv_init.c.
 // Implementation in sv_guidcheck.c (except sv_protocol{,check} which are
@@ -338,7 +343,18 @@ void SV_MasterHeartbeat( const char *hbname ) {
 		Com_Printf( "Sending heartbeat to %s\n", sv_master[i]->string );
 		// this command should be changed if the server info / status format
 		// ever incompatably changes
+		sys_packetSendOrigin = 0;
 		NET_OutOfBandPrint( NS_SERVER, adr[i], "heartbeat %s\n", hbname );
+
+		// [ETDS dualport] If an extra socket is configured, send a second
+		// heartbeat through it so the master lists the server twice
+		// (once per protocol). The extra send is a no-op if net_port_extra
+		// is 0 (Sys_SendPacket falls back to main on !ip_socket_extra).
+		if ( Cvar_VariableIntegerValue( "net_port_extra" ) != 0 ) {
+			sys_packetSendOrigin = 1;
+			NET_OutOfBandPrint( NS_SERVER, adr[i], "heartbeat %s\n", hbname );
+			sys_packetSendOrigin = 0;
+		}
 	}
 }
 
@@ -465,7 +481,7 @@ and all connected players.  Used for getting detailed information after
 the simple info query.
 ================
 */
-void SVC_Status( netadr_t from ) {
+void SVC_Status( netadr_t from, int fromExtra ) {
 	char player[1024];
 	char status[MAX_MSGLEN];
 	int i;
@@ -492,11 +508,43 @@ void SVC_Status( netadr_t from ) {
 		return;
 	}
 
+	// [ETDS dualport] Reject over-long challenge strings (DoS amplification
+	// vector used to flood the response network). Pauluzz ET 3.00 0.7.4
+	// rejects at 128 bytes.
+	if ( strlen( Cmd_Argv( 1 ) ) > 128 ) {
+		SV_WriteDefenceLog( va( "SVC_Status: challenge length from %s exceeded, dropping request",
+		                        NET_AdrToString( from ) ) );
+		return;
+	}
+
+	// [ETDS dualport] Route the reply through the socket the query came
+	// from (main or extra). See SVC_Info for the rationale.
+	sys_packetSendOrigin = fromExtra;
+
 	strcpy( infostring, Cvar_InfoString( CVAR_SERVERINFO | CVAR_SERVERINFO_NOUPDATE ) );
 
 	// echo back the parameter to status. so master servers can use it as a challenge
 	// to prevent timed spoofed reply packets that add ghost servers
 	Info_SetValueForKey( infostring, "challenge", Cmd_Argv( 1 ) );
+
+	// [ETDS dualport + protocolinfo] Pauluzz-style protocol advertise:
+	//   fromExtra == 0 (main socket):  report sv_protocol verbatim
+	//   fromExtra == 1 (extra socket): report the OPPOSITE protocol, plus
+	//                                  "sv_isf" set to the main net_port
+	//                                  so browsers can pair the two listings.
+	Info_SetValueForKey( infostring, "version", "ET 3.00 - Wolffiles ETDS" );
+	if ( fromExtra == 0 ) {
+		if ( sv_protocol ) {
+			Info_SetValueForKey( infostring, "protocol", va( "%d", sv_protocol->integer ) );
+		}
+	} else {
+		Info_SetValueForKey( infostring, "sv_isf", Cvar_VariableString( "net_port" ) );
+		if ( sv_protocol && sv_protocol->integer == 84 ) {
+			Info_SetValueForKey( infostring, "protocol", "83" );
+		} else {
+			Info_SetValueForKey( infostring, "protocol", "84" );
+		}
+	}
 
 	// add "demo" to the sv_keywords if restricted
 	if ( Cvar_VariableValue( "fs_restrict" ) ) {
@@ -600,7 +648,7 @@ Responds with a short info message that should be enough to determine
 if a user is interested in a server to do a full status
 ================
 */
-void SVC_Info( netadr_t from ) {
+void SVC_Info( netadr_t from, int fromExtra ) {
 	int i, count;
 	char    *gamedir;
 	char infostring[MAX_INFO_STRING];
@@ -632,13 +680,30 @@ void SVC_Info( netadr_t from ) {
 		}
 	}
 
+	// [ETDS dualport] Route the reply through the socket the query came
+	// from (main or extra). Without this all responses would go through
+	// the main socket, and clients that queried the extra port would
+	// never receive an answer because of UDP NAT / source-port matching.
+	sys_packetSendOrigin = fromExtra;
+
 	infostring[0] = 0;
 
 	// echo back the parameter to status. so servers can use it as a challenge
 	// to prevent timed spoofed reply packets that add ghost servers
 	Info_SetValueForKey( infostring, "challenge", Cmd_Argv( 1 ) );
 
-	Info_SetValueForKey( infostring, "protocol", va( "%i", PROTOCOL_VERSION ) );
+	// [ETDS dualport + protocolinfo] Advertise protocol based on source socket.
+	if ( fromExtra == 0 ) {
+		Info_SetValueForKey( infostring, "protocol",
+			va( "%i", sv_protocol ? sv_protocol->integer : PROTOCOL_VERSION ) );
+	} else {
+		Info_SetValueForKey( infostring, "sv_isf", Cvar_VariableString( "net_port" ) );
+		if ( sv_protocol && sv_protocol->integer == 84 ) {
+			Info_SetValueForKey( infostring, "protocol", "83" );
+		} else {
+			Info_SetValueForKey( infostring, "protocol", "84" );
+		}
+	}
 	Info_SetValueForKey( infostring, "hostname", sv_hostname->string );
 	Info_SetValueForKey( infostring, "serverload", va( "%i", svs.serverLoad ) );
 	Info_SetValueForKey( infostring, "mapname", sv_mapname->string );
@@ -823,9 +888,9 @@ void SV_ConnectionlessPacket( netadr_t from, msg_t *msg ) {
 	Com_DPrintf( "SV packet %s : %s\n", NET_AdrToString( from ), c );
 
 	if ( !Q_stricmp( c,"getstatus" ) ) {
-		SVC_Status( from  );
+		SVC_Status( from, sv_packetSourceOrigin );
 	} else if ( !Q_stricmp( c,"getinfo" ) ) {
-		SVC_Info( from );
+		SVC_Info( from, sv_packetSourceOrigin );
 	} else if ( !Q_stricmp( c,"getchallenge" ) ) {
 		SV_GetChallenge( from );
 	} else if ( !Q_stricmp( c,"connect" ) ) {
@@ -854,6 +919,11 @@ SV_ReadPackets
 =================
 */
 void SV_PacketEvent( netadr_t from, msg_t *msg ) {
+	// [ETDS dualport] Snapshot which socket this packet came from
+	// (0 = main, 1 = extra). Used by SVC_Info/SVC_Status to decide
+	// which protocol version to advertise.
+	sv_packetSourceOrigin = net_from_socketOrigin;
+
 	int i;
 	client_t    *cl;
 	int qport;
