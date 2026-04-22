@@ -42,7 +42,7 @@ A dynamically-grown table tracks observed source addresses. For each IP:
     the entry becomes "released" again.
   - If the counter exceeds sv_maxGetstatusPerMinute within the window,
     further requests from that IP are silently dropped ("flagged" state).
-  - If the counter additionally exceeds sv_maxGetstatusBeforeBlock, the
+  - If the counter additionally exceeds sv_maxGetstatusBeforeIPTABLES, the
     entry is marked "blocked" for the rest of the session (no log spam).
   - Entries inactive for >30 minutes are recycled (LRU).
 
@@ -57,8 +57,9 @@ intentionally omitted here: shelling out to a privileged tool from a
 user-space game server is a security and portability anti-pattern
 (requires root, Linux-only, persists outside the server lifecycle,
 no rollback on crash). Application-layer dropping is sufficient and
-safe, and the CVar has been renamed from sv_maxGetstatusBeforeIPTABLES
-to the OS-agnostic sv_maxGetstatusBeforeBlock.
+safe. The CVar name is kept as sv_maxGetstatusBeforeIPTABLES for 1:1
+compatibility with Pauluzz ET 3.00 0.7.4 server configs, even though
+our implementation does not actually invoke iptables.
 
 The CVars are registered in sv_init.c (SV_Init). They are referenced
 here via `extern` from sv_main.c.
@@ -86,7 +87,7 @@ here via `extern` from sv_main.c.
 
 extern cvar_t *sv_maxGetstatusCheck;
 extern cvar_t *sv_maxGetstatusPerMinute;
-extern cvar_t *sv_maxGetstatusBeforeBlock;
+extern cvar_t *sv_maxGetstatusBeforeIPTABLES;
 
 // --- Types ----------------------------------------------------------------
 
@@ -233,7 +234,7 @@ qboolean SV_CheckForFlood( const netadr_t *from ) {
 
 	entry->packet_count++;
 	threshold       = sv_maxGetstatusPerMinute   ? sv_maxGetstatusPerMinute->integer   : 0;
-	block_threshold = sv_maxGetstatusBeforeBlock ? sv_maxGetstatusBeforeBlock->integer : 0;
+	block_threshold = sv_maxGetstatusBeforeIPTABLES ? sv_maxGetstatusBeforeIPTABLES->integer : 0;
 
 	if ( threshold > 0 && (int)entry->packet_count > threshold ) {
 		// Log once when the soft threshold is first crossed.

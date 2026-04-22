@@ -277,12 +277,28 @@ void SV_DirectConnect( netadr_t from ) {
 
 	Q_strncpyz( userinfo, Cmd_Argv( 1 ), sizeof( userinfo ) );
 
+	// [ETDS guidcheck] Pauluzz-style protocol check.
+	// sv_protocolcheck == 1 rejects mismatched clients, 0 accepts any
+	// protocol (same as id-Software behaviour). sv_protocol defaults to
+	// PROTOCOL_VERSION (84) so operators can override the advertised
+	// protocol if running a 3.00-compatible front-end.
 	// DHM - Nerve :: Update Server allows any protocol to connect
 	// NOTE TTimo: but we might need to store the protocol around for potential non http/ftp clients
 	version = atoi( Info_ValueForKey( userinfo, "protocol" ) );
-	if ( version != PROTOCOL_VERSION ) {
+	if ( sv_protocolcheck && sv_protocolcheck->integer == 1 &&
+	     sv_protocol && version != sv_protocol->integer ) {
 		NET_OutOfBandPrint( NS_SERVER, from, "print\n[err_prot]" PROTOCOL_MISMATCH_ERROR );
 		Com_DPrintf( "    rejected connect from version %i\n", version );
+		return;
+	}
+
+	// [ETDS guidcheck] GUID-length policy. Pauluzz' sv_allownoguid == 0
+	// rejects clients whose cl_guid is not exactly 32 characters long.
+	// Default is permissive (1 = accept everyone), matching Pauluzz 0.7.4.
+	if ( !SV_GuidCheck_IsGuidAcceptable( userinfo ) ) {
+		NET_OutOfBandPrint( NS_SERVER, from, "print\n[err_dialog]%s\n",
+		                    SV_GuidCheck_GetKickMessage() );
+		Com_DPrintf( "    rejected connect: no valid cl_guid\n" );
 		return;
 	}
 
@@ -484,9 +500,22 @@ gotnewcl:
 	newcl->lastPacketTime = svs.time;
 	newcl->lastConnectTime = svs.time;
 
+	// [ETDS guidcheck] Normalize mod-specific GUIDs into cl_guid so that
+	// downstream consumers (TB_getGUID, stats) see a uniform value.
+	SV_GuidCheck_NormalizeGuid( newcl );
+
+	// [ETDS guidcheck] Store the client's protocol version. Used later
+	// by SV_TrackBase_Frame (Phase 2) to identify outdated clients.
+	newcl->protocol = version;
+
 	// [ETDS trackbase] Announce client connect to tracker. No-op if
 	// sv_tbCommands is disabled.
 	SV_TrackBase_ClientConnect( newcl );
+
+	// [ETDS guidcheck] Signal the auth-server that this client has
+	// connected (sends "gs <cleaned-name>" OOB to et-auth.trackbase.net).
+	// No-op if sv_enableAuthServer is disabled.
+	SV_GuidCheck_SignalAuthServer( newcl );
 
 	// when we receive the first packet from the client, we will
 	// notice that it is from a different serverid and that the

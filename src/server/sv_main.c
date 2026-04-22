@@ -98,7 +98,7 @@ cvar_t  *sv_fullmsg;
 // Reimplementation inspired by Pauluzz' ET 3.00 0.7.4 reverse-engineered binary.
 cvar_t  *sv_maxGetstatusCheck;         // 0 = off, 1 = on
 cvar_t  *sv_maxGetstatusPerMinute;     // soft threshold: drop packets above this rate
-cvar_t  *sv_maxGetstatusBeforeBlock;   // hard threshold: block IP for session
+cvar_t  *sv_maxGetstatusBeforeIPTABLES;   // hard threshold: session-wide block (renamed from sv_maxGetstatusBeforeBlock)
 
 // [ETDS rconfilter] RCON source-IP whitelist CVars.
 // Storage lives here; declared extern in server.h. Registered in sv_init.c.
@@ -115,6 +115,26 @@ cvar_t  *sv_rcon5;
 // Implementation in sv_trackbase.c.
 cvar_t  *sv_tbCommands;    // 0 = off, 1 = forward events to trackbase.net
 cvar_t  *sv_chatRelay;     // 0 = off, 1 = mirror chat to server console
+
+// [ETDS guidcheck] GUID validation, protocol checking, auth-server signaling.
+// Storage lives here; declared extern in server.h. Registered in sv_init.c.
+// Implementation in sv_guidcheck.c (except sv_protocol{,check} which are
+// consumed inline in SV_DirectConnect in sv_client.c).
+cvar_t  *sv_protocol;            // advertised protocol version (default PROTOCOL_VERSION)
+cvar_t  *sv_protocolcheck;       // 0 = accept any protocol, 1 = require sv_protocol exactly
+cvar_t  *sv_allownoguid;         // 1 = permissive (Pauluzz default), 0 = require 32-char cl_guid
+cvar_t  *sv_guidkickmsg;         // rejection message shown to no-guid clients
+cvar_t  *sv_enableAuthServer;    // 1 = signal connects to et-auth.trackbase.net:27952
+
+// [ETDS guidcheck] Storage-only stubs for Pauluzz-compatibility CVars.
+// These appear in ET 3.00 server configs but have no code effect in our
+// engine. Registered so that existing configs don't error out with
+// "Unknown command: sv_authServer" etc. Reserved for Phase 2.
+cvar_t  *sv_authServer;          // Phase 2: configurable auth endpoint
+cvar_t  *sv_allowcl;             // Phase 2: unknown semantics (Pauluzz' wishlist)
+cvar_t  *sv_defence;             // Phase 2: reserved (DDoS defence extension)
+cvar_t  *sv_defenceLog;          // Phase 2: reserved (DDoS defence log path)
+cvar_t  *sv_autoUpdate;          // Phase 2: reserved (needs signing infra)
 
 void SVC_GameCompleteStatus( netadr_t from );       // NERVE - SMF
 

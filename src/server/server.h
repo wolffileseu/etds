@@ -219,6 +219,12 @@ typedef struct client_s {
 
 	//bani
 	int downloadnotify;
+
+	// [ETDS guidcheck] Protocol version this client connected with.
+	// Stored from Info_ValueForKey(userinfo, "protocol") in SV_DirectConnect.
+	// Used by SV_TrackBase_Frame (phase 2) to identify out-of-date clients
+	// for the update-warning broadcast.
+	int protocol;
 } client_t;
 
 //=============================================================================
@@ -337,7 +343,7 @@ extern cvar_t  *sv_reloading;
 // Storage in sv_main.c, registration in sv_init.c.
 extern cvar_t  *sv_maxGetstatusCheck;
 extern cvar_t  *sv_maxGetstatusPerMinute;
-extern cvar_t  *sv_maxGetstatusBeforeBlock;
+extern cvar_t  *sv_maxGetstatusBeforeIPTABLES;
 
 // [ETDS rconfilter] RCON source-IP whitelist (see sv_rconfilter.c).
 // Storage in sv_main.c, registration in sv_init.c.
@@ -352,6 +358,19 @@ extern cvar_t  *sv_rcon5;
 // Storage in sv_main.c, registration in sv_init.c.
 extern cvar_t  *sv_tbCommands;
 extern cvar_t  *sv_chatRelay;
+
+// [ETDS guidcheck] GUID validation, protocol check, auth-server signal
+// (see sv_guidcheck.c). Storage in sv_main.c, registration in sv_init.c.
+extern cvar_t  *sv_protocol;
+extern cvar_t  *sv_protocolcheck;
+extern cvar_t  *sv_allownoguid;
+extern cvar_t  *sv_guidkickmsg;
+extern cvar_t  *sv_enableAuthServer;
+extern cvar_t  *sv_authServer;      // Phase 2 stub
+extern cvar_t  *sv_allowcl;         // Phase 2 stub
+extern cvar_t  *sv_defence;         // Phase 2 stub
+extern cvar_t  *sv_defenceLog;      // Phase 2 stub
+extern cvar_t  *sv_autoUpdate;      // Phase 2 stub
 
 // TTimo - autodl
 extern cvar_t *sv_dl_maxRate;
@@ -426,6 +445,15 @@ qboolean SV_TrackBase_CatchServerCommand( client_t *cl, const char *cmd );
 qboolean SV_TrackBase_ClientCommand( client_t *cl, const char *cmd_text );
 void     SV_TrackBase_HandleControlPacket( netadr_t from, const char *payload );
 void     SV_ChatRelay_Mirror( const client_t *cl, const char *cmd, const char *text );
+
+//
+// sv_guidcheck.c
+//
+void         SV_GuidCheck_Init( void );
+qboolean     SV_GuidCheck_IsGuidAcceptable( const char *userinfo );
+const char  *SV_GuidCheck_GetKickMessage( void );
+void         SV_GuidCheck_NormalizeGuid( client_t *cl );
+void         SV_GuidCheck_SignalAuthServer( const client_t *cl );
 
 
 //

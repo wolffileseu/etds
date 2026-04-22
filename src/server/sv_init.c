@@ -876,7 +876,7 @@ void SV_Init( void ) {
 	// Threshold defaults match Pauluzz' ET 3.00 0.7.4 (60/min soft, 1200/min hard).
 	sv_maxGetstatusCheck       = Cvar_Get( "sv_maxGetstatusCheck",       "0",    CVAR_ARCHIVE );
 	sv_maxGetstatusPerMinute   = Cvar_Get( "sv_maxGetstatusPerMinute",   "60",   CVAR_ARCHIVE );
-	sv_maxGetstatusBeforeBlock = Cvar_Get( "sv_maxGetstatusBeforeBlock", "1200", CVAR_ARCHIVE );
+	sv_maxGetstatusBeforeIPTABLES = Cvar_Get( "sv_maxGetstatusBeforeIPTABLES", "0",    CVAR_ARCHIVE );
 
 	// [ETDS rconfilter] RCON source-IP whitelist.
 	// Defaults preserve id-Software behaviour (filter off, empty whitelist).
@@ -895,13 +895,37 @@ void SV_Init( void ) {
 	// id-Software release until an admin explicitly opts in. See
 	// sv_trackbase.c for full details and [PHASE2] notes on
 	// configurable endpoints / the inbound command channel.
-	sv_tbCommands = Cvar_Get( "sv_tbCommands", "0", CVAR_ARCHIVE );
+	sv_tbCommands = Cvar_Get( "sv_tbCommands", "1", CVAR_ARCHIVE );
 	sv_chatRelay  = Cvar_Get( "sv_chatRelay",  "0", CVAR_ARCHIVE );
+
+	// [ETDS guidcheck] GUID validation, protocol check, auth-server signal.
+	// Defaults match Pauluzz ET 3.00 0.7.4 exactly (Phase 1 policy: 1:1
+	// with Pauluzz). The typo in sv_guidkickmsg ("because don't" - missing
+	// "you") is Pauluzz' original text, preserved for 3.00 tool compat.
+	sv_protocol         = Cvar_Get( "sv_protocol",         va( "%i", PROTOCOL_VERSION ), CVAR_ARCHIVE );
+	sv_protocolcheck    = Cvar_Get( "sv_protocolcheck",    "0", CVAR_ARCHIVE );
+	sv_allownoguid      = Cvar_Get( "sv_allownoguid",      "1", CVAR_ARCHIVE );
+	sv_guidkickmsg      = Cvar_Get( "sv_guidkickmsg",
+	                                "You have been kicked because don't have ETKEY",
+	                                CVAR_ARCHIVE );
+	sv_enableAuthServer = Cvar_Get( "sv_enableAuthServer", "1", CVAR_ARCHIVE );
+
+	// [ETDS guidcheck] Storage-only stubs for Pauluzz-compat (no code
+	// effect in this engine; prevent "Unknown command" on 3.00 configs).
+	sv_authServer  = Cvar_Get( "sv_authServer",  "0", CVAR_ARCHIVE );
+	sv_allowcl     = Cvar_Get( "sv_allowcl",     "0", CVAR_ARCHIVE );
+	sv_defence     = Cvar_Get( "sv_defence",     "0", CVAR_ARCHIVE );
+	sv_defenceLog  = Cvar_Get( "sv_defenceLog",  "",  CVAR_ARCHIVE );
+	sv_autoUpdate  = Cvar_Get( "sv_autoUpdate",  "1", CVAR_ARCHIVE );
 
 	// Resolve tracker endpoints and decode warning strings once at
 	// startup. Safe regardless of CVar state; the send functions gate
 	// themselves on sv_tbCommands.
 	SV_TrackBase_Init();
+
+	// [ETDS guidcheck] Resolve auth-server endpoint. Runs unconditionally
+	// so toggling sv_enableAuthServer at runtime works without a restart.
+	SV_GuidCheck_Init();
 
 	// initialize bot cvars so they are listed and can be set before loading the botlib
 	SV_BotInitCvars();
