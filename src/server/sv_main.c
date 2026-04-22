@@ -542,8 +542,11 @@ void SVC_Status( netadr_t from, int fromExtra ) {
 		}
 	} else {
 		Info_SetValueForKey( infostring, "sv_isf", Cvar_VariableString( "net_port" ) );
+		// [ETDS dualport] Pauluzz ET 3.00 0.7.4 runtime behavior observed
+		// via comparison test: extra port advertises protocol 82 (not 83)
+		// when main is 84. Updated from 83 to 82 to match byte-for-byte.
 		if ( sv_protocol && sv_protocol->integer == 84 ) {
-			Info_SetValueForKey( infostring, "protocol", "83" );
+			Info_SetValueForKey( infostring, "protocol", "82" );
 		} else {
 			Info_SetValueForKey( infostring, "protocol", "84" );
 		}
@@ -718,8 +721,11 @@ void SVC_Info( netadr_t from, int fromExtra ) {
 			va( "%i", sv_protocol ? sv_protocol->integer : PROTOCOL_VERSION ) );
 	} else {
 		Info_SetValueForKey( infostring, "sv_isf", Cvar_VariableString( "net_port" ) );
+		// [ETDS dualport] Pauluzz ET 3.00 0.7.4 runtime behavior observed
+		// via comparison test: extra port advertises protocol 82 (not 83)
+		// when main is 84. Updated from 83 to 82 to match byte-for-byte.
 		if ( sv_protocol && sv_protocol->integer == 84 ) {
-			Info_SetValueForKey( infostring, "protocol", "83" );
+			Info_SetValueForKey( infostring, "protocol", "82" );
 		} else {
 			Info_SetValueForKey( infostring, "protocol", "84" );
 		}
