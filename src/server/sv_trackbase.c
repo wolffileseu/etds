@@ -72,6 +72,11 @@ extern cvar_t *sv_tbHosts;        // [ETDS multi-tracker] ';'-separated primary 
 extern cvar_t *sv_tbControlHosts; // [ETDS multi-tracker] ';'-separated control hosts
 extern cvar_t *sv_chatRelay;
 
+// [ETDS multi-tracker] Forward declaration so SV_TrackBase_Frame can call
+// the parser for its hot-reload path; the definition lives near the
+// SV_TrackBase_Init function below.
+static int TB_ParseHostList( const char *list, netadr_t *out, int max_out, const char *channel_name );
+
 // [ETDS multi-tracker] Arrays of resolved endpoint addresses. tb_addrs[]
 // receives stats packets (start, map, connect, ws, p, ...), tb_addrsC[]
 // receives chat / control packets (chat, cc) and handles replies (tbc).
@@ -283,6 +288,49 @@ void SV_TrackBase_CatchChat( const client_t *cl, const char *text ) {
 void SV_TrackBase_Frame( void ) {
 	time_t now;
 	int    i;
+
+	// [ETDS multi-tracker] Hot-reload: if sv_tbHosts or sv_tbControlHosts
+	// were modified after server startup (e.g. via `exec server.cfg`,
+	// `rcon set sv_tbHosts ...`, or an in-game console command on a
+	// listen server), re-run the address resolution so new endpoints
+	// take effect without requiring a map restart.
+	// Matches the ETL sv_tracker hot-reload pattern.
+	if ( ( sv_tbHosts && sv_tbHosts->modified ) ||
+	     ( sv_tbControlHosts && sv_tbControlHosts->modified ) ) {
+		Com_Printf( "TrackBase: host list changed, reinitializing endpoints...\n" );
+		if ( sv_tbHosts ) {
+			sv_tbHosts->modified = qfalse;
+		}
+		if ( sv_tbControlHosts ) {
+			sv_tbControlHosts->modified = qfalse;
+		}
+		// Re-parse only the address arrays without touching runtime state
+		// (tb_expectnum, tb_maprunning, heartbeat timer, etc.). The init
+		// function's side effect on these fields is only appropriate at
+		// true startup, not mid-session reload.
+		{
+			const char *primary_list;
+			const char *control_list;
+
+			tb_numAddrs  = 0;
+			tb_numAddrsC = 0;
+
+			primary_list = sv_tbHosts ? sv_tbHosts->string : NULL;
+			if ( !primary_list || !primary_list[0] ) {
+				primary_list = TB_HOST_PRIMARY_DEFAULT;
+			}
+			tb_numAddrs = TB_ParseHostList( primary_list, tb_addrs, TB_MAX_TRACKERS, "stats" );
+
+			control_list = sv_tbControlHosts ? sv_tbControlHosts->string : NULL;
+			if ( !control_list || !control_list[0] ) {
+				control_list = TB_HOST_CONTROL_DEFAULT;
+			}
+			tb_numAddrsC = TB_ParseHostList( control_list, tb_addrsC, TB_MAX_TRACKERS, "control" );
+
+			Com_Printf( "TrackBase: %d stats endpoint(s), %d control endpoint(s) active after reload.\n",
+			            tb_numAddrs, tb_numAddrsC );
+		}
+	}
 
 	if ( !sv_tbCommands || !sv_tbCommands->integer ) {
 		return;
