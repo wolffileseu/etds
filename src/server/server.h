@@ -357,6 +357,8 @@ extern cvar_t  *sv_rcon5;
 // [ETDS trackbase] TrackBase integration + chat relay (see sv_trackbase.c).
 // Storage in sv_main.c, registration in sv_init.c.
 extern cvar_t  *sv_tbCommands;
+extern cvar_t  *sv_tbHosts;        // [ETDS multi-tracker] ';'-separated primary/stats hosts
+extern cvar_t  *sv_tbControlHosts; // [ETDS multi-tracker] ';'-separated control/chat hosts
 extern cvar_t  *sv_chatRelay;
 
 // [ETDS guidcheck] GUID validation, protocol check, auth-server signal

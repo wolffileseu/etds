@@ -896,6 +896,13 @@ void SV_Init( void ) {
 	// sv_trackbase.c for full details and [PHASE2] notes on
 	// configurable endpoints / the inbound command channel.
 	sv_tbCommands = Cvar_Get( "sv_tbCommands", "1", CVAR_ARCHIVE );
+
+	// [ETDS multi-tracker] Semicolon-separated list of TrackBase-compatible
+	// endpoints, each "host:port". Empty = use defaults
+	// (et-tracker.trackbase.net:4444 for stats, :4445 for control).
+	// Supports up to TB_MAX_TRACKERS (8) endpoints per channel.
+	sv_tbHosts        = Cvar_Get( "sv_tbHosts",        "", CVAR_ARCHIVE );
+	sv_tbControlHosts = Cvar_Get( "sv_tbControlHosts", "", CVAR_ARCHIVE );
 	sv_chatRelay  = Cvar_Get( "sv_chatRelay",  "0", CVAR_ARCHIVE );
 
 	// [ETDS guidcheck] GUID validation, protocol check, auth-server signal.

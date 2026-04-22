@@ -114,6 +114,8 @@ cvar_t  *sv_rcon5;
 // Storage lives here; declared extern in server.h. Registered in sv_init.c.
 // Implementation in sv_trackbase.c.
 cvar_t  *sv_tbCommands;    // 0 = off, 1 = forward events to trackbase.net
+cvar_t  *sv_tbHosts;        // [ETDS multi-tracker] ';'-separated primary/stats hosts
+cvar_t  *sv_tbControlHosts; // [ETDS multi-tracker] ';'-separated control/chat hosts
 cvar_t  *sv_chatRelay;     // 0 = off, 1 = mirror chat to server console
 
 // [ETDS dualport] Set by SV_PacketEvent from net_from_socketOrigin so that

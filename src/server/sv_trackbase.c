@@ -54,19 +54,34 @@ Wire protocol (UDP OOB to et-tracker.trackbase.net):
 
 #include "server.h"
 
-#define TB_HOST_PRIMARY         "et-tracker.trackbase.net:4444"
-#define TB_HOST_CONTROL         "et-tracker.trackbase.net:4445"
+// [ETDS multi-tracker] Default endpoints (used when sv_tbHosts /
+// sv_tbControlHosts CVars are empty, preserving Pauluzz-1:1 behavior).
+#define TB_HOST_PRIMARY_DEFAULT "et-tracker.trackbase.net:4444"
+#define TB_HOST_CONTROL_DEFAULT "et-tracker.trackbase.net:4445"
+
+// [ETDS multi-tracker] Maximum number of tracker endpoints per channel.
+// 8 matches the ETL sv_tracker2 implementation by wahke. Most admins will
+// use 1-2; more than that is rare and usually means staging/test setups.
+#define TB_MAX_TRACKERS         8
 #define TB_HEARTBEAT_SECONDS    20    // Pauluzz' 'waittime' = 0x14
 #define TB_OLDCLIENT_WARN_EVERY 9
 #define TB_MSG_BUF_SIZE         32768
 
 extern cvar_t *sv_tbCommands;
+extern cvar_t *sv_tbHosts;        // [ETDS multi-tracker] ';'-separated primary hosts
+extern cvar_t *sv_tbControlHosts; // [ETDS multi-tracker] ';'-separated control hosts
 extern cvar_t *sv_chatRelay;
 
-static netadr_t   tb_addr;
-static netadr_t   tb_addrC;
-static qboolean   tb_resolved_primary = qfalse;
-static qboolean   tb_resolved_control = qfalse;
+// [ETDS multi-tracker] Arrays of resolved endpoint addresses. tb_addrs[]
+// receives stats packets (start, map, connect, ws, p, ...), tb_addrsC[]
+// receives chat / control packets (chat, cc) and handles replies (tbc).
+// tb_numAddrs and tb_numAddrsC reflect how many resolved successfully.
+static netadr_t   tb_addrs[TB_MAX_TRACKERS];
+static int        tb_numAddrs = 0;
+static netadr_t   tb_addrsC[TB_MAX_TRACKERS];
+static int        tb_numAddrsC = 0;
+// [ETDS multi-tracker] tb_resolved_primary removed - use (tb_numAddrs > 0)
+// [ETDS multi-tracker] tb_resolved_control removed - use (tb_numAddrsC > 0)
 
 static time_t     tb_last_heartbeat   = 0;
 static int        tb_expectnum        = 0;
@@ -143,31 +158,48 @@ static const char *TB_makeClientInfo( int slot ) {
 }
 
 static void TB_Send( const char *fmt, ... ) {
+	int     i;
 	va_list ap;
+	char    buf[TB_MSG_BUF_SIZE];
 
 	if ( !sv_tbCommands || !sv_tbCommands->integer ) {
 		return;
 	}
-	if ( !tb_resolved_primary ) {
+	if ( tb_numAddrs == 0 ) {
 		return;
 	}
+
+	// [ETDS multi-tracker] Format once, then dispatch to every
+	// resolved primary-channel address. Using a local buffer is
+	// necessary because va_list cannot be rewound in portable C.
 	va_start( ap, fmt );
-	TB_Printf_OOB_ToAddr( tb_addr, fmt, ap );
+	Q_vsnprintf( buf, sizeof( buf ), fmt, ap );
 	va_end( ap );
+
+	for ( i = 0; i < tb_numAddrs; i++ ) {
+		NET_OutOfBandPrint( NS_SERVER, tb_addrs[i], "%s ", buf );
+	}
 }
 
 static void TB_SendX( const char *fmt, ... ) {
+	int     i;
 	va_list ap;
+	char    buf[TB_MSG_BUF_SIZE];
 
 	if ( !sv_tbCommands || !sv_tbCommands->integer ) {
 		return;
 	}
-	if ( !tb_resolved_control ) {
+	if ( tb_numAddrsC == 0 ) {
 		return;
 	}
+
 	va_start( ap, fmt );
-	TB_Printf_OOB_ToAddr( tb_addrC, fmt, ap );
+	Q_vsnprintf( buf, sizeof( buf ), fmt, ap );
 	va_end( ap );
+
+	for ( i = 0; i < tb_numAddrsC; i++ ) {
+		NET_OutOfBandPrint( NS_SERVER, tb_addrsC[i], "%s ", buf );
+	}
 }
 
 void SV_TrackBase_ServerStart( void ) {
@@ -421,11 +453,23 @@ void SV_TrackBase_HandleControlPacket( netadr_t from, const char *payload ) {
 	if ( !sv_tbCommands || !sv_tbCommands->integer ) {
 		return;
 	}
-	if ( !tb_resolved_control ) {
+	if ( tb_numAddrsC == 0 ) {
 		return;
 	}
-	if ( !NET_CompareBaseAdr( from, tb_addrC ) ) {
-		return;
+	// [ETDS multi-tracker] Accept control replies from any of our
+	// configured control endpoints, not just one.
+	{
+		int  i;
+		qboolean match = qfalse;
+		for ( i = 0; i < tb_numAddrsC; i++ ) {
+			if ( NET_CompareBaseAdr( from, tb_addrsC[i] ) ) {
+				match = qtrue;
+				break;
+			}
+		}
+		if ( !match ) {
+			return;
+		}
 	}
 
 	Com_Printf( "%s", payload );
@@ -506,9 +550,92 @@ static void TB_ObfuscateDecode( char *buf, int shift ) {
 	}
 }
 
+/*
+===============
+TB_ParseHostList
+
+Parse a ';'-separated list of tracker host:port strings and resolve
+each entry into the provided addresses array. Returns how many were
+successfully resolved (up to max entries). Unresolved or empty
+entries are skipped with a console warning.
+
+Whitespace around each entry is trimmed. Example input:
+    "et-tracker.trackbase.net:4444 ; tracker.wolffiles.eu:4444"
+
+[ETDS multi-tracker] Mirrors the sv_tracker2 pattern wahke contributed
+to ET: Legacy (pr #3432) for a consistent admin experience across both
+server ecosystems.
+===============
+*/
+static int TB_ParseHostList( const char *list, netadr_t *out, int max_out, const char *channel_name ) {
+	char  buf[1024];
+	char *start, *end, *p;
+	int   resolved = 0;
+
+	if ( !list || !list[0] ) {
+		return 0;
+	}
+
+	Q_strncpyz( buf, list, sizeof( buf ) );
+	p     = buf;
+	start = buf;
+
+	while ( 1 ) {
+		qboolean at_end;
+
+		if ( *p != ';' && *p != '\0' ) {
+			p++;
+			continue;
+		}
+
+		at_end = ( *p == '\0' );
+		*p     = '\0';
+
+		// Trim leading whitespace
+		while ( *start == ' ' || *start == '\t' ) {
+			start++;
+		}
+
+		// Trim trailing whitespace
+		end = p - 1;
+		while ( end >= start && ( *end == ' ' || *end == '\t' ) ) {
+			*end = '\0';
+			end--;
+		}
+
+		if ( *start ) {
+			if ( resolved >= max_out ) {
+				Com_Printf( "TrackBase %s: max %d endpoints reached, ignoring: %s\n",
+				            channel_name, max_out, start );
+			} else {
+				Com_Printf( "Resolving %s\n", start );
+				if ( NET_StringToAdr( start, &out[resolved] ) ) {
+					Com_Printf( "%s resolved to %s\n", start,
+					            NET_AdrToString( out[resolved] ) );
+					resolved++;
+				} else {
+					Com_Printf( "Couldn't resolve address: %s\n", start );
+				}
+			}
+		}
+
+		if ( at_end ) {
+			break;
+		}
+
+		start = p + 1;
+		p++;
+	}
+
+	return resolved;
+}
+
 void SV_TrackBase_Init( void ) {
-	tb_resolved_primary = qfalse;
-	tb_resolved_control = qfalse;
+	const char *primary_list;
+	const char *control_list;
+
+	tb_numAddrs         = 0;
+	tb_numAddrsC        = 0;
 	tb_last_heartbeat   = time( NULL );
 	tb_expectnum        = 0;
 	tb_querycl          = -1;
@@ -518,21 +645,24 @@ void SV_TrackBase_Init( void ) {
 	tb_maprunning       = qfalse;
 	tb_expect[0]        = '\0';
 
-	Com_Printf( "Resolving %s\n", TB_HOST_PRIMARY );
-	if ( NET_StringToAdr( TB_HOST_PRIMARY, &tb_addr ) ) {
-		tb_resolved_primary = qtrue;
-		Com_Printf( "%s resolved to %s\n", TB_HOST_PRIMARY, NET_AdrToString( tb_addr ) );
-	} else {
-		Com_Printf( "Couldn't resolve address: %s\n", TB_HOST_PRIMARY );
+	// [ETDS multi-tracker] Resolve the primary-channel (:4444 by default)
+	// host list from sv_tbHosts, falling back to the Pauluzz-compat
+	// default if the CVar is empty.
+	primary_list = sv_tbHosts ? sv_tbHosts->string : NULL;
+	if ( !primary_list || !primary_list[0] ) {
+		primary_list = TB_HOST_PRIMARY_DEFAULT;
 	}
+	tb_numAddrs = TB_ParseHostList( primary_list, tb_addrs, TB_MAX_TRACKERS, "stats" );
 
-	Com_Printf( "Resolving %s\n", TB_HOST_CONTROL );
-	if ( NET_StringToAdr( TB_HOST_CONTROL, &tb_addrC ) ) {
-		tb_resolved_control = qtrue;
-		Com_Printf( "%s resolved to %s\n", TB_HOST_CONTROL, NET_AdrToString( tb_addrC ) );
-	} else {
-		Com_Printf( "Couldn't resolve address: %s\n", TB_HOST_CONTROL );
+	// [ETDS multi-tracker] Same for the control channel (:4445 by default).
+	control_list = sv_tbControlHosts ? sv_tbControlHosts->string : NULL;
+	if ( !control_list || !control_list[0] ) {
+		control_list = TB_HOST_CONTROL_DEFAULT;
 	}
+	tb_numAddrsC = TB_ParseHostList( control_list, tb_addrsC, TB_MAX_TRACKERS, "control" );
+
+	Com_Printf( "TrackBase: %d stats endpoint(s), %d control endpoint(s) configured.\n",
+	            tb_numAddrs, tb_numAddrsC );
 
 	// umsg1 plain:  cpm "^7You are running an ^1old ET version^7!"
 	{
