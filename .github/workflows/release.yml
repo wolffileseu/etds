@@ -1,0 +1,222 @@
+# GitHub Actions release pipeline for Wolffiles ETDS
+#
+# Triggers on v* tag push (e.g. `git push origin v0.0.5`). Builds the
+# Linux 32-bit dedicated server inside a Debian 12 Docker container —
+# matching the development environment used to author and verify Phase 1
+# and Phase 2 commits — and uploads the binary as an asset to a GitHub
+# release for the same tag.
+#
+# Windows 32-bit support is scaffolded but commented out. Stock id-Software
+# ET 2010 supports MinGW cross-compile via the SCons `gcc_is_mingw()` path
+# in src/SConstruct, and all Wolffiles Phase-1 / Phase-2 modules
+# (sv_antiflood.c, sv_defence.c, sv_trackbase.c, sv_rconfilter.c,
+# sv_guidcheck.c, sv_quietlog.c) only include `server.h` — they don't
+# touch POSIX directly — so the path should still work today. What's
+# unverified is whether GCC 14 / MinGW 14 still compiles win_net.c
+# without changes, and whether the engine's win32 socket layer plays
+# nicely with our dual-port / TrackBase additions. Activate the Windows
+# job once that's tested locally; see the TODO block below.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Cancel any in-flight build for the same tag if a new push lands. Tags
+# normally don't move, but git tag -d + git push --force tags happen
+# during CI iteration.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+# Read repo contents + write to release assets. Default GITHUB_TOKEN has
+# enough scope; no PAT needed.
+permissions:
+  contents: write
+
+jobs:
+
+  # ---------------------------------------------------------------------
+  # build-linux-x86
+  #
+  # Debian 12 (Bookworm) + gcc-multilib gives us the exact toolchain
+  # used for the manually-built v0.0.1 through v0.0.4 releases. The
+  # container image is pulled once per run; the build itself takes
+  # ~30-60 seconds on GitHub's standard ubuntu-24.04 runner.
+  # ---------------------------------------------------------------------
+  build-linux-x86:
+    name: Build Linux 32-bit (Debian 12)
+    runs-on: ubuntu-24.04
+    container:
+      image: debian:12
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential \
+            gcc-multilib \
+            g++-multilib \
+            libc6-dev-i386 \
+            scons \
+            nasm \
+            libgl-dev \
+            file \
+            python3 \
+            git \
+            ca-certificates
+          gcc --version
+          scons --version | head -3
+
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Mark working tree safe (git owner check inside container)
+        # GitHub runners run as a different uid than the container,
+        # which trips git's safe-directory check. Without this, scons'
+        # version-stamp step (which calls `git describe`) would fail.
+        run: git config --global --add safe.directory '*'
+
+      - name: Build etded.x86 (release mode)
+        working-directory: src
+        run: |
+          scons \
+            DEDICATED=1 \
+            BUILD=release \
+            BUILD_CLIENT=0 \
+            BUILD_SERVER=1 \
+            BUILD_BSPC=0 \
+            TARGET_CORE=1 \
+            TARGET_CGAME=0 \
+            TARGET_GAME=0 \
+            TARGET_UI=0
+
+      - name: Verify binary
+        working-directory: src
+        run: |
+          test -f etded.x86 || { echo "::error::etded.x86 not produced"; exit 1; }
+          file etded.x86
+          ls -la etded.x86
+
+      - name: Rename binary for release asset
+        # Convention from manual releases: etded-<tag>.x86
+        # github.ref_name on a `v0.0.5` tag push is exactly "v0.0.5"
+        run: |
+          cp src/etded.x86 etded-${{ github.ref_name }}.x86
+
+      - name: Upload build artifact
+        # Stash the renamed binary so the release job can pick it up
+        # without rebuilding. Retention is short — only the release
+        # asset itself is the permanent record.
+        uses: actions/upload-artifact@v4
+        with:
+          name: etded-linux-x86
+          path: etded-${{ github.ref_name }}.x86
+          retention-days: 7
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------
+  # build-windows-x86  (DISABLED — scaffolded for Phase 2/3)
+  #
+  # MinGW cross-compile path. The id-Software SConstruct already detects
+  # MinGW via `gcc_is_mingw()` and switches g_os to 'win32', pulling in
+  # win32/win_*.c via SConscript.core. What hasn't been verified since
+  # the 2010 release:
+  #
+  # 1. Whether win_net.c (Winsock 1.1 era) still compiles under MinGW 14
+  #    without warnings-as-errors firing on the modern toolchain.
+  # 2. Whether our Phase-1 dual-port code in sv_main.c / sv_net_chan.c
+  #    has any implicit assumptions about ip_socket / ip_socket_extra
+  #    that win_net.c's two-socket model doesn't match.
+  # 3. Whether SCons can actually drive i686-w64-mingw32-gcc end-to-end
+  #    on Ubuntu — older docs assume Debian's mingw-w64 package layout.
+  #
+  # TODO before enabling this job:
+  #   - Build locally with: scons CC="i686-w64-mingw32-gcc" \
+  #       CXX="i686-w64-mingw32-g++" DEDICATED=1 BUILD=release \
+  #       BUILD_SERVER=1 BUILD_CLIENT=0 BUILD_BSPC=0 TARGET_CORE=1 \
+  #       TARGET_CGAME=0 TARGET_GAME=0 TARGET_UI=0
+  #   - Smoke-test etded.exe in a Windows VM
+  #   - Verify sv_trackbase / dual-port work over Winsock
+  #   - Then uncomment the block below and bump the release version
+  #
+  # build-windows-x86:
+  #   name: Build Windows 32-bit (MinGW cross)
+  #   runs-on: ubuntu-24.04
+  #   container:
+  #     image: debian:12
+  #   steps:
+  #     - name: Install MinGW cross toolchain
+  #       run: |
+  #         apt-get update
+  #         apt-get install -y --no-install-recommends \
+  #           mingw-w64 scons python3 git ca-certificates
+  #     - name: Checkout sources
+  #       uses: actions/checkout@v4
+  #     - name: Mark working tree safe
+  #       run: git config --global --add safe.directory '*'
+  #     - name: Build etded.exe
+  #       working-directory: src
+  #       run: |
+  #         scons \
+  #           CC="i686-w64-mingw32-gcc" \
+  #           CXX="i686-w64-mingw32-g++" \
+  #           DEDICATED=1 \
+  #           BUILD=release \
+  #           BUILD_CLIENT=0 \
+  #           BUILD_SERVER=1 \
+  #           BUILD_BSPC=0 \
+  #           TARGET_CORE=1 \
+  #           TARGET_CGAME=0 \
+  #           TARGET_GAME=0 \
+  #           TARGET_UI=0
+  #     - name: Rename binary
+  #       run: cp src/etded.exe etded-${{ github.ref_name }}.exe
+  #     - name: Upload build artifact
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: etded-windows-x86
+  #         path: etded-${{ github.ref_name }}.exe
+  #         retention-days: 7
+  #         if-no-files-found: error
+
+  # ---------------------------------------------------------------------
+  # release
+  #
+  # Single source of truth for the GitHub Release. Waits for builds,
+  # downloads the produced artifacts, and either creates a new release
+  # or attaches the new files to an existing one. The `softprops` action
+  # is the de-facto standard and handles both cases cleanly.
+  # ---------------------------------------------------------------------
+  release:
+    name: Publish GitHub Release
+    needs:
+      - build-linux-x86
+      # Add `build-windows-x86` to this list once the job above is uncommented.
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List collected artifacts
+        run: |
+          find artifacts -type f -printf '%p  %s bytes\n'
+
+      - name: Publish release with assets
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          # If a release already exists for this tag (e.g. a manual
+          # upload), append the CI-built assets to it rather than
+          # failing. Useful when re-running CI for an old tag.
+          fail_on_unmatched_files: true
+          generate_release_notes: false
+          files: |
+            artifacts/etded-linux-x86/etded-${{ github.ref_name }}.x86
