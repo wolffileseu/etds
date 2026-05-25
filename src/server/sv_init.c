@@ -925,6 +925,11 @@ void SV_Init( void ) {
 	sv_defenceLog  = Cvar_Get( "sv_defenceLog",  "",  CVAR_ARCHIVE );
 	sv_autoUpdate  = Cvar_Get( "sv_autoUpdate",  "1", CVAR_ARCHIVE );
 
+	// [ETDS quietlog] Console-spam filter for qagame G_PRINT output.
+	// Default 0 preserves Pauluzz / id-Software stock behaviour.
+	sv_quietGameLog      = Cvar_Get( "sv_quietGameLog",      "0", CVAR_ARCHIVE );
+	sv_quietGamePatterns = Cvar_Get( "sv_quietGamePatterns", "",  CVAR_ARCHIVE );
+
 	// Resolve tracker endpoints and decode warning strings once at
 	// startup. Safe regardless of CVar state; the send functions gate
 	// themselves on sv_tbCommands.

@@ -380,6 +380,15 @@ extern int S_GetSoundLength( sfxHandle_t sfxHandle );
 int SV_GameSystemCalls( int *args ) {
 	switch ( args[0] ) {
 	case G_PRINT:
+		// [ETDS quietlog] Allow operator to silence noisy qagame output
+		// (ClientConnect/Begin/UserinfoChanged, Userinfo dumps, Omnibot
+		// init, mapscript autospawn lines). No-op when sv_quietGameLog
+		// == 0, which is the default and matches Pauluzz / id-Software
+		// stock behaviour. The logfile path is unaffected because the
+		// qagame writes that through trap_FS_Write, not G_PRINT.
+		if ( SV_QuietGameLog_ShouldDrop( (const char *)VMA( 1 ) ) ) {
+			return 0;
+		}
 		Com_Printf( "%s", (char *)VMA( 1 ) );
 		return 0;
 	case G_ERROR:

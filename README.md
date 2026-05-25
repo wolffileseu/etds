@@ -39,6 +39,7 @@ All features are reverse-engineered from the Pauluzz 0.7.4 binary.
 | Auth-server signaling | `sv_enableAuthServer`, `sv_authServer` | [fc9fae9](https://github.com/wolffileseu/etds/commit/fc9fae9) | Emits `gs <name>` OOB packets on player join for external auth services |
 | **Dual UDP port + protocol inversion** | `net_port_extra` | [4d3ff2e](https://github.com/wolffileseu/etds/commit/4d3ff2e) | Open a second UDP socket that advertises the opposite protocol + `sv_isf` backlink |
 | q3boom + Challenge-injection defence | `sv_defence`, `sv_defenceLog` | [8a50259](https://github.com/wolffileseu/etds/commit/8a50259) | Logs over-long or malformed challenge strings (q3boom 2006, info-string injection) |
+| Quiet game-log filter | `sv_quietGameLog`, `sv_quietGamePatterns` | [be89948](https://github.com/wolffileseu/etds/commit/be89948) | Suppresses noisy qagame `G_PRINT` lines (ClientConnect/Begin/UserinfoChanged/Userinfo dumps, Omnibot init, mapscript autospawn warnings) on the server console. The qagame logfile (`games_mp.log`) is unaffected — only the live console is filtered. |
 
 Plus infrastructure work:
 
@@ -143,6 +144,8 @@ If the extra port is already in use, the server tries ports `+1..+9` as fallback
 | `sv_rcon1..sv_rcon5` | `""` | Allowed rcon source IPs; supports `*` wildcards |
 | `sv_defence` | `0` | 1 = log dropped abuse events to `sv_defenceLog` |
 | `sv_defenceLog` | `""` | Log file path (absolute or relative to server CWD) |
+| `sv_quietGameLog` | `0` | 0 = all qagame output on console (default, Pauluzz parity); 1 = drop per-client spam (`ClientConnect:`, `ClientBegin:`, `ClientDisconnect:`, `ClientUserinfoChanged:`, `Userinfo:`); 2 = also drop Omnibot init (`Omni-bot`, `Goals Loaded`) and mapscript noise (`Setting Allied/Axis autospawn`, `Warning: setstate`). `games_mp.log` is unaffected. |
+| `sv_quietGamePatterns` | `""` | `;`-separated list of additional case-sensitive prefix patterns to suppress. Leading `^X` color codes on the incoming line are stripped before matching, so write patterns like `"Goals Loaded;Bot used"` without color escapes. Applied in addition to whatever `sv_quietGameLog` level is active. |
 
 All CVars are archived (saved to server config) unless noted.
 
@@ -168,8 +171,9 @@ The full before-and-after of every Pauluzz function we touched is available in t
 
 **Phase 1 (done).** 1:1 Pauluzz feature parity. Captured in tag `v0.0.0-pauluzz-1to1`. Released as `v0.0.1` with Wolffiles branding.
 
-**Phase 2 (planned).** Wolffiles-specific improvements:
+**Phase 2 (in progress).** Wolffiles-specific improvements:
 
+- Quiet game-log filter (`sv_quietGameLog`, `sv_quietGamePatterns`) — **done in v0.0.4**
 - Configurable TrackBase endpoint (`sv_tbHost`) — currently hardcoded to `et-tracker.trackbase.net`
 - `sv_tbAllowRemoteCommand` kill-switch — currently TrackBase has unconditional server-command access
 - QVM syscall round-trip for score/ready/team_id stats in `TB_Frame`

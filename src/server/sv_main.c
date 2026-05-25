@@ -143,6 +143,11 @@ cvar_t  *sv_defence;             // Phase 2: reserved (DDoS defence extension)
 cvar_t  *sv_defenceLog;          // Phase 2: reserved (DDoS defence log path)
 cvar_t  *sv_autoUpdate;          // Phase 2: reserved (needs signing infra)
 
+// [ETDS quietlog] Phase 2: suppress noisy qagame G_PRINT lines from the
+// server console. The qagame logfile (games_mp.log) is unaffected.
+cvar_t  *sv_quietGameLog;        // 0 = off, 1 = drop per-client noise, 2 = + mapscript/Omnibot
+cvar_t  *sv_quietGamePatterns;   // ';'-separated custom prefix list
+
 void SVC_GameCompleteStatus( netadr_t from );       // NERVE - SMF
 
 #define LL( x ) x = LittleLong( x )

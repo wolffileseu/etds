@@ -373,6 +373,8 @@ extern cvar_t  *sv_allowcl;         // Phase 2 stub
 extern cvar_t  *sv_defence;         // Phase 2 stub
 extern cvar_t  *sv_defenceLog;      // Phase 2 stub
 extern cvar_t  *sv_autoUpdate;      // Phase 2 stub
+extern cvar_t  *sv_quietGameLog;    // [ETDS quietlog] Phase 2: console-spam filter level
+extern cvar_t  *sv_quietGamePatterns; // [ETDS quietlog] Phase 2: custom ';'-separated patterns
 
 // TTimo - autodl
 extern cvar_t *sv_dl_maxRate;
@@ -452,6 +454,11 @@ void     SV_ChatRelay_Mirror( const client_t *cl, const char *cmd, const char *t
 // sv_defence.c
 //
 void         SV_WriteDefenceLog( const char *message );
+
+//
+// sv_quietlog.c
+//
+qboolean     SV_QuietGameLog_ShouldDrop( const char *msg );
 
 // [ETDS dualport] Server-local copy of net_from_socketOrigin, set by
 // SV_PacketEvent. 0 = packet came from main socket, 1 = extra socket.
