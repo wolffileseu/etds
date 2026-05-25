@@ -37,17 +37,19 @@ If you have questions concerning this license or the applicable additional terms
 #pragma warning( pop )
 #endif
 
+// [ETDS win32] DEDICATED servers don't use DirectInput/DirectSound at all,
+// and modern MinGW-w64 no longer ships the legacy <directx.h> umbrella header
+// that pre-2010 MinGW provided. Skip the entire block for dedicated builds;
+// for client builds, modern MinGW has <dinput.h> + <dsound.h> directly.
+#ifndef DEDICATED
 #ifdef DOOMSOUND    ///// (SA) DOOMSOUND
 #include "../mssdk/include/dinput.h"
 #include "../mssdk/include/dsound.h"
 #else
-#ifndef __GNUC__
 #include <dinput.h>
 #include <dsound.h>
-#else
-#include <directx.h>
-#endif
 #endif  ///// (SA) DOOMSOUND
+#endif  // !DEDICATED
 
 #include <winsock.h>
 #include <wsipx.h>

@@ -57,6 +57,17 @@ static SOCKET ip_socket;
 static SOCKET socks_socket;
 static SOCKET ipx_socket;
 
+// [ETDS dualport] Second UDP socket bound to net_port_extra. Mirrors
+// unix_net.c so SVC_Info/SVC_Status can advertise the opposite protocol
+// on a different port (used for the ET 2.55 / ETLegacy bridge).
+static SOCKET ip_socket_extra;
+
+// [ETDS dualport] Globals declared non-static; extern declarations live
+// in qcommon.h so sv_main.c can read net_from_socketOrigin and write
+// sys_packetSendOrigin. Must match unix_net.c definitions exactly.
+int net_from_socketOrigin = 0;
+int sys_packetSendOrigin  = 0;
+
 #define MAX_IPS     16
 static int numIP;
 static byte localIP[MAX_IPS][4];
@@ -257,9 +268,15 @@ qboolean Sys_GetPacket( netadr_t *net_from, msg_t *net_message ) {
 	int protocol;
 	int err;
 
-	for ( protocol = 0 ; protocol < 2 ; protocol++ ) {
+	// [ETDS dualport] Scan three possible sockets:
+	//   protocol == 0 -> ip_socket        (main, net_port)
+	//   protocol == 1 -> ip_socket_extra  (extra, net_port_extra; may be 0)
+	//   protocol == 2 -> ipx_socket       (legacy, rarely used)
+	for ( protocol = 0 ; protocol < 3 ; protocol++ ) {
 		if ( protocol == 0 ) {
 			net_socket = ip_socket;
+		} else if ( protocol == 1 ) {
+			net_socket = ip_socket_extra;
 		} else {
 			net_socket = ipx_socket;
 		}
@@ -307,6 +324,12 @@ qboolean Sys_GetPacket( netadr_t *net_from, msg_t *net_message ) {
 		}
 
 		net_message->cursize = ret;
+
+		// [ETDS dualport] Tag the packet with its source socket (0 = main,
+		// 1 = extra). SV_PacketEvent and SV_ConnectionlessPacket read this
+		// via the sv_packetSourceOrigin helper (see sv_main.c).
+		net_from_socketOrigin = ( protocol == 1 ) ? 1 : 0;
+
 		return qtrue;
 	}
 
@@ -327,10 +350,14 @@ void Sys_SendPacket( int length, const void *data, netadr_t to ) {
 	struct sockaddr addr;
 	SOCKET net_socket;
 
+	// [ETDS dualport] sys_packetSendOrigin (set by caller, e.g.
+	// SV_MasterHeartbeat for the second heartbeat) selects the socket:
+	//   0 = main (ip_socket)
+	//   1 = extra (ip_socket_extra) - falls back to main if extra is closed
 	if ( to.type == NA_BROADCAST ) {
-		net_socket = ip_socket;
+		net_socket = ( sys_packetSendOrigin == 1 && ip_socket_extra ) ? ip_socket_extra : ip_socket;
 	} else if ( to.type == NA_IP )    {
-		net_socket = ip_socket;
+		net_socket = ( sys_packetSendOrigin == 1 && ip_socket_extra ) ? ip_socket_extra : ip_socket;
 	} else if ( to.type == NA_IPX )    {
 		net_socket = ipx_socket;
 	} else if ( to.type == NA_BROADCAST_IPX )    {
@@ -873,14 +900,21 @@ NET_OpenIP
 void NET_OpenIP( void ) {
 	cvar_t  *ip;
 	int port;
+	int port_extra;
 	int i;
+	qboolean main_ok = qfalse;
 
 	ip = Cvar_Get( "net_ip", "localhost", CVAR_LATCH );
 	port = Cvar_Get( "net_port", va( "%i", PORT_SERVER ), CVAR_LATCH )->integer;
+	// [ETDS dualport] Optional second UDP socket bound to a different port.
+	// Default 0 = disabled; when non-zero, the server listens on both ports
+	// and advertises the opposite protocol via sv_protocol on the extra one.
+	port_extra = Cvar_Get( "net_port_extra", "0", 0 )->integer;
 
 	// automatically scan for a valid port, so multiple
 	// dedicated servers can be started without requiring
 	// a different net_port for each one
+	Com_Printf( "[NET_OpenIP] net_port is %d, will try to bind socket!\n", port );
 	for ( i = 0 ; i < 10 ; i++ ) {
 		ip_socket = NET_IPSocket( ip->string, port + i );
 		if ( ip_socket ) {
@@ -889,10 +923,31 @@ void NET_OpenIP( void ) {
 				NET_OpenSocks( port + i );
 			}
 			NET_GetLocalAddress();
+			main_ok = qtrue;
+			break;
+		}
+	}
+	if ( !main_ok ) {
+		Com_Printf( "WARNING: Couldn't allocate IP port\n" );
+		return;
+	}
+
+	// [ETDS dualport] Optional extra socket. Non-fatal if it fails to bind;
+	// we just log and continue with single-port operation.
+	if ( port_extra == 0 ) {
+		return;
+	}
+	Com_Printf( "[NET_OpenIP] net_port_extra is %d, will try to bind socket!\n", port_extra );
+	for ( i = 0 ; i < 10 ; i++ ) {
+		ip_socket_extra = NET_IPSocket( ip->string, port_extra + i );
+		if ( ip_socket_extra ) {
+			Cvar_SetValue( "net_port_extra", port_extra + i );
+			Com_Printf( "[NET_OpenIP] extra socket bound to port %d\n", port_extra + i );
 			return;
 		}
 	}
-	Com_Printf( "WARNING: Couldn't allocate IP port\n" );
+	Com_Printf( "[NET_OpenIP] Couldn't allocate extra IP port (tried %d..%d), continuing without dual-port\n",
+	            port_extra, port_extra + 9 );
 }
 
 
@@ -1060,6 +1115,12 @@ void NET_Config( qboolean enableNetworking ) {
 		if ( ip_socket && ip_socket != INVALID_SOCKET ) {
 			closesocket( ip_socket );
 			ip_socket = 0;
+		}
+
+		// [ETDS dualport] Close the extra socket too if it's open.
+		if ( ip_socket_extra && ip_socket_extra != INVALID_SOCKET ) {
+			closesocket( ip_socket_extra );
+			ip_socket_extra = 0;
 		}
 
 		if ( socks_socket && socks_socket != INVALID_SOCKET ) {

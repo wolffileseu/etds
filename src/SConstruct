@@ -138,6 +138,17 @@ BUILDMPBIN = '0'
 
 # arch detection ---------------------------------
 
+# [ETDS win32] Pre-scan the command line for an explicit CC/CXX override
+# *before* gcc_is_mingw() runs. The site.conf and the main ARGUMENTS loop
+# below both come too late - by then arch detection has already settled
+# on g_os = 'Linux' and the win32/* sources would be skipped even with
+# CC=i686-w64-mingw32-gcc supplied. This lets a clean MinGW cross-compile
+# work with the standard scons CC="..." idiom.
+if 'CC' in ARGUMENTS:
+        CC = ARGUMENTS['CC']
+if 'CXX' in ARGUMENTS:
+        CXX = ARGUMENTS['CXX']
+
 def gcc_major():
         major = os.popen( CC + ' -dumpversion' ).read().strip()
         major = re.sub('^([^.]+)\\..*$', '\\1', major)
