@@ -143,54 +143,75 @@ jobs:
   # 3. Whether SCons can actually drive i686-w64-mingw32-gcc end-to-end
   #    on Ubuntu — older docs assume Debian's mingw-w64 package layout.
   #
-  # TODO before enabling this job:
-  #   - Build locally with: scons CC="i686-w64-mingw32-gcc" \
-  #       CXX="i686-w64-mingw32-g++" DEDICATED=1 BUILD=release \
-  #       BUILD_SERVER=1 BUILD_CLIENT=0 BUILD_BSPC=0 TARGET_CORE=1 \
-  #       TARGET_CGAME=0 TARGET_GAME=0 TARGET_UI=0
-  #   - Smoke-test etded.exe in a Windows VM
-  #   - Verify sv_trackbase / dual-port work over Winsock
-  #   - Then uncomment the block below and bump the release version
+  # ---------------------------------------------------------------------
+  # build-windows-x86
   #
-  # build-windows-x86:
-  #   name: Build Windows 32-bit (MinGW cross)
-  #   runs-on: ubuntu-24.04
-  #   container:
-  #     image: debian:12
-  #   steps:
-  #     - name: Install MinGW cross toolchain
-  #       run: |
-  #         apt-get update
-  #         apt-get install -y --no-install-recommends \
-  #           mingw-w64 scons python3 git ca-certificates
-  #     - name: Checkout sources
-  #       uses: actions/checkout@v4
-  #     - name: Mark working tree safe
-  #       run: git config --global --add safe.directory '*'
-  #     - name: Build etded.exe
-  #       working-directory: src
-  #       run: |
-  #         scons \
-  #           CC="i686-w64-mingw32-gcc" \
-  #           CXX="i686-w64-mingw32-g++" \
-  #           DEDICATED=1 \
-  #           BUILD=release \
-  #           BUILD_CLIENT=0 \
-  #           BUILD_SERVER=1 \
-  #           BUILD_BSPC=0 \
-  #           TARGET_CORE=1 \
-  #           TARGET_CGAME=0 \
-  #           TARGET_GAME=0 \
-  #           TARGET_UI=0
-  #     - name: Rename binary
-  #       run: cp src/etded.exe etded-${{ github.ref_name }}.exe
-  #     - name: Upload build artifact
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: etded-windows-x86
-  #         path: etded-${{ github.ref_name }}.exe
-  #         retention-days: 7
-  #         if-no-files-found: error
+  # Windows i386 cross-compile via MinGW-w64 (i686-w64-mingw32-gcc) in a
+  # Debian 12 container. Produces etded.exe with the same Phase-1/Phase-2
+  # feature set as the Linux binary (dual-port via win_net.c port).
+  # ---------------------------------------------------------------------
+  build-windows-x86:
+    name: Build Windows 32-bit (MinGW cross)
+    runs-on: ubuntu-24.04
+    container:
+      image: debian:12
+    steps:
+      - name: Install MinGW cross toolchain
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            mingw-w64 \
+            mingw-w64-tools \
+            scons \
+            python3 \
+            git \
+            ca-certificates \
+            file \
+            binutils
+          i686-w64-mingw32-gcc --version | head -1
+          scons --version | head -3
+      - name: Checkout sources
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Mark working tree safe
+        run: git config --global --add safe.directory '*'
+      - name: Build etded.exe
+        working-directory: src
+        run: |
+          scons \
+            CC="i686-w64-mingw32-gcc" \
+            CXX="i686-w64-mingw32-g++" \
+            DEDICATED=1 \
+            BUILD=release \
+            BUILD_CLIENT=0 \
+            BUILD_SERVER=1 \
+            BUILD_BSPC=0 \
+            TARGET_CORE=1 \
+            TARGET_CGAME=0 \
+            TARGET_GAME=0 \
+            TARGET_UI=0 \
+            NOCONF=1 \
+            WOLFFILES_VERSION="${{ github.ref_name }}"
+      - name: Verify binary
+        run: |
+          file src/etded.exe
+          ls -la src/etded.exe
+          echo "--- Version string ---"
+          strings src/etded.exe | grep "Wolffiles ETDS" | head -3
+          echo "--- Phase-2 cvars ---"
+          strings src/etded.exe | grep -E "^sv_quietGameLog$|^net_port_extra$|^sv_tbHosts$" | head -5
+          echo "--- DLL dependencies ---"
+          i686-w64-mingw32-objdump -p src/etded.exe | grep "DLL Name"
+      - name: Rename binary
+        run: cp src/etded.exe etded-${{ github.ref_name }}.exe
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: etded-windows-x86
+          path: etded-${{ github.ref_name }}.exe
+          retention-days: 7
+          if-no-files-found: error
 
   # ---------------------------------------------------------------------
   # release
@@ -204,7 +225,7 @@ jobs:
     name: Publish GitHub Release
     needs:
       - build-linux-x86
-      # Add `build-windows-x86` to this list once the job above is uncommented.
+      - build-windows-x86
     runs-on: ubuntu-24.04
 
     steps:
@@ -229,3 +250,4 @@ jobs:
           generate_release_notes: false
           files: |
             artifacts/etded-linux-x86/etded-${{ github.ref_name }}.x86
+            artifacts/etded-windows-x86/etded-${{ github.ref_name }}.exe
