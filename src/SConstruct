@@ -282,6 +282,45 @@ if ( OS == 'Darwin' ):
 # maintain this dangerous optimization off at all times
 g_env.Append( CPPFLAGS = '-fno-strict-aliasing' )
 
+# [ETDS version] Resolve the Wolffiles ETDS version string and inject it
+# as a compile-time preprocessor define. The string ends up in the
+# `getstatus` reply as "ET 3.00 - Wolffiles ETDS X.Y.Z" — see
+# src/server/sv_main.c (SVC_Status). Resolution order:
+#   1. WOLFFILES_VERSION=...  (explicit SCons argument; CI uses this)
+#   2. `git describe --tags --always --dirty=-dev`  (local builds)
+#   3. literal "dev"  (no git available, e.g. source tarball)
+# Leading 'v' on the resolved string is stripped so the binary advertises
+# "0.0.5" rather than "v0.0.5", matching the pre-v0.0.4 convention.
+def resolve_wolffiles_version():
+        import subprocess
+        if 'WOLFFILES_VERSION' in ARGUMENTS and ARGUMENTS['WOLFFILES_VERSION']:
+                v = ARGUMENTS['WOLFFILES_VERSION']
+        else:
+                try:
+                        v = subprocess.check_output(
+                                [ 'git', 'describe', '--tags', '--always', '--dirty=-dev' ],
+                                stderr = subprocess.DEVNULL
+                        ).decode( 'utf-8', 'replace' ).strip()
+                except Exception:
+                        v = 'dev'
+        if v.startswith( 'v' ):
+                v = v[1:]
+        # Strip anything that would break a C string literal or shell
+        # quoting; if someone passes WOLFFILES_VERSION="0.0.5; rm -rf /"
+        # we don't want to embed that. Keep alnum + dot + dash + underscore.
+        import re
+        v = re.sub( r'[^A-Za-z0-9._\-]', '', v )
+        if not v:
+                v = 'dev'
+        return v
+
+WOLFFILES_VERSION_STR = resolve_wolffiles_version()
+print( 'Wolffiles ETDS version: ' + WOLFFILES_VERSION_STR )
+# Escape the inner quotes once for the gcc command line: the resulting
+# flag is  -DWOLFFILES_VERSION=\"0.0.5\"  which gcc unescapes into the
+# preprocessor define  WOLFFILES_VERSION="0.0.5".
+g_env.Append( CPPFLAGS = '-DWOLFFILES_VERSION=\\"' + WOLFFILES_VERSION_STR + '\\"' )
+
 if ( int(JOBS) > 1 ):
         print('Using buffered process output')
         scons_utils.SetupBufferedOutput( g_env )

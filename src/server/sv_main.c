@@ -143,11 +143,6 @@ cvar_t  *sv_defence;             // Phase 2: reserved (DDoS defence extension)
 cvar_t  *sv_defenceLog;          // Phase 2: reserved (DDoS defence log path)
 cvar_t  *sv_autoUpdate;          // Phase 2: reserved (needs signing infra)
 
-// [ETDS quietlog] Phase 2: suppress noisy qagame G_PRINT lines from the
-// server console. The qagame logfile (games_mp.log) is unaffected.
-cvar_t  *sv_quietGameLog;        // 0 = off, 1 = drop per-client noise, 2 = + mapscript/Omnibot
-cvar_t  *sv_quietGamePatterns;   // ';'-separated custom prefix list
-
 void SVC_GameCompleteStatus( netadr_t from );       // NERVE - SMF
 
 #define LL( x ) x = LittleLong( x )
@@ -542,7 +537,15 @@ void SVC_Status( netadr_t from, int fromExtra ) {
 	//   fromExtra == 1 (extra socket): report the OPPOSITE protocol, plus
 	//                                  "sv_isf" set to the main net_port
 	//                                  so browsers can pair the two listings.
-	Info_SetValueForKey( infostring, "version", "ET 3.00 - Wolffiles ETDS 0.0.3" );
+	//
+	// [ETDS version] WOLFFILES_VERSION is injected at compile time via
+	// SConstruct (-D flag). Default fallback is "dev" if neither a build
+	// arg nor `git describe` is available. See src/SConstruct for the
+	// resolution order.
+#ifndef WOLFFILES_VERSION
+#define WOLFFILES_VERSION "dev"
+#endif
+	Info_SetValueForKey( infostring, "version", "ET 3.00 - Wolffiles ETDS " WOLFFILES_VERSION );
 	if ( fromExtra == 0 ) {
 		if ( sv_protocol ) {
 			Info_SetValueForKey( infostring, "protocol", va( "%d", sv_protocol->integer ) );

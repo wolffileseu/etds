@@ -62,9 +62,6 @@ jobs:
             g++-multilib \
             libc6-dev-i386 \
             scons \
-            nasm \
-            libgl-dev \
-            file \
             python3 \
             git \
             ca-certificates
@@ -73,6 +70,12 @@ jobs:
 
       - name: Checkout sources
         uses: actions/checkout@v4
+        with:
+          # Fetch full history + tags. SCons needs `git describe --tags`
+          # to resolve the version string injected as -DWOLFFILES_VERSION.
+          # With the default fetch-depth: 1 there are no tag refs and the
+          # describe call would fall back to a bare commit hash.
+          fetch-depth: 0
 
       - name: Mark working tree safe (git owner check inside container)
         # GitHub runners run as a different uid than the container,
@@ -83,6 +86,8 @@ jobs:
       - name: Build etded.x86 (release mode)
         working-directory: src
         run: |
+          # github.ref_name on a tag push is the tag itself (e.g. "v0.0.5").
+          # SCons strips the leading 'v' internally.
           scons \
             DEDICATED=1 \
             BUILD=release \
@@ -92,7 +97,8 @@ jobs:
             TARGET_CORE=1 \
             TARGET_CGAME=0 \
             TARGET_GAME=0 \
-            TARGET_UI=0
+            TARGET_UI=0 \
+            WOLFFILES_VERSION="${{ github.ref_name }}"
 
       - name: Verify binary
         working-directory: src
